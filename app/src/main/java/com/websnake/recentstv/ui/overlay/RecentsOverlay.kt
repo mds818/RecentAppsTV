@@ -102,6 +102,9 @@ fun RecentsOverlay(
     // One draw-phase transform for the whole strip → smooth, no per-frame relayout.
     val txAnim = animateFloatAsState(targetTx, tween(340, easing = ease), label = "tx")
 
+    val focusedTask = if (!gearFocused && dismissing == null)
+        (items.getOrNull(focus) as? OverlayItem.Card)?.task else null
+
     Box(
         Modifier
             .fillMaxSize()
@@ -174,6 +177,22 @@ fun RecentsOverlay(
             }
         }
 
+        // ── single focused-app label, centered along the bottom of the screen ──
+        if (focusedTask != null) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 46.dp),
+            ) {
+                Text(focusedTask.label, style = Type.title, color = Tokens.text, maxLines = 1, textAlign = TextAlign.Center)
+                if (focusedTask.category.isNotBlank()) {
+                    Text(focusedTask.category, style = Type.small, color = Tokens.textDim, maxLines = 1, textAlign = TextAlign.Center)
+                }
+            }
+        }
     }
 }
 
@@ -285,26 +304,6 @@ private fun AppCard(
                 )
             } else {
                 Text(task.label.take(1).uppercase(), style = Type.hero, color = Tokens.text)
-            }
-        }
-
-        // focused name + category — in-card (exactly one focused card → exactly one
-        // label, tracks its card with no measured-position fragility). Hidden while
-        // peeking so the dismiss hint can take its place.
-        if (focused && flyDir == null && peekDir < 0) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier
-                    .requiredWidth(size.dp * 3.4f)
-                    .graphicsLayer {
-                        translationY = with(density) { (size.dp * 0.5f * 1.15f + 16.dp).toPx() }
-                    },
-            ) {
-                Text(task.label, style = Type.label, color = Tokens.text, maxLines = 1, textAlign = TextAlign.Center)
-                if (task.category.isNotBlank()) {
-                    Text(task.category, style = Type.small, color = Tokens.textDim, maxLines = 1, textAlign = TextAlign.Center)
-                }
             }
         }
 

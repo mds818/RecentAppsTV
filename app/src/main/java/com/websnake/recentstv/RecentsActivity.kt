@@ -274,9 +274,8 @@ class RecentsActivity : ComponentActivity() {
         when (code) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> { peekDir = -1; moveFocus(-1) }   // toward Kill-All
             KeyEvent.KEYCODE_DPAD_LEFT -> { peekDir = -1; moveFocus(+1) }    // toward older
-            KeyEvent.KEYCODE_DPAD_UP ->
-                if (isKillAllAt(focus)) gearFocused = true else dismissStep(0)  // UP on Kill-All → gear
-            KeyEvent.KEYCODE_DPAD_DOWN -> if (!isKillAllAt(focus)) dismissStep(1)
+            KeyEvent.KEYCODE_DPAD_UP -> { peekDir = -1; gearFocused = true } // UP → settings gear
+            KeyEvent.KEYCODE_DPAD_DOWN -> if (!isKillAllAt(focus)) dismissStep(1)  // DOWN → dismiss/kill flow
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> activate()
         }
     }

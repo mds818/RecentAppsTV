@@ -90,11 +90,6 @@ downscaled. Ship a **release** build — non-debuggable Compose is dramatically 
 # → app/build/outputs/apk/release/app-release.apk
 ```
 
-## Roadmap
-
-- [ ] **Android TV home-screen channel** (TvProvider) mirroring the recents, refreshed by a
-  periodic worker + on overlay open; tapping a tile switches straight to the app.
-
 ## Credits
 
 Original design medium: HTML/CSS/JS prototype (Claude Design). Shizuku by RikkaApps.
