@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <!-- Read usage stats as a graceful fallback when privileged task APIs are unavailable -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- See labels/icons of all installed apps for the Exceptions list -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <application
+        android:name=".RecentsApp"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/ic_launcher"
+        android:banner="@drawable/banner"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Recents.Overlay">
+
+        <!-- The overlay: a translucent dialog over whatever app is running. -->
+        <activity
+            android:name=".RecentsActivity"
+            android:theme="@style/Theme.Recents.Overlay"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:resizeableActivity="false"
+            android:screenOrientation="landscape">
+
+            <!-- Launcher target (also makes it a valid shortcut intent). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Also respond to an explicit VIEW action (used by the shortcuts). -->
+            <intent-filter>
+                <action android:name="com.websnake.recentstv.OPEN_RECENTS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!-- Leanback-style settings, also reachable from the overlay. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:theme="@style/Theme.Recents.Solid"
+            android:exported="true"
+            android:label="@string/settings_title"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+    </application>
+</manifest>

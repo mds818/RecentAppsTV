@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+android {
+    namespace 'com.websnake.recentstv'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.websnake.recentstv"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            // No minification: privileged framework reflection (IActivityTaskManager,
+            // Shizuku) must not be stripped/renamed. Non-debuggable release dex is
+            // what makes Compose smooth on the TV GPU.
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    buildFeatures {
+        compose true
+    }
+}
+
+dependencies {
+    def composeBom = platform('androidx.compose:compose-bom:2024.10.01')
+    implementation composeBom
+
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.animation:animation'
+
+    // Compose for TV
+    implementation 'androidx.tv:tv-material:1.0.0'
+
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+    // DataStore for settings persistence
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+
+    // Shizuku (same versions as the working force-stop app)
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
+
+    // Hidden API blocklist bypass for privileged framework reflection
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+}

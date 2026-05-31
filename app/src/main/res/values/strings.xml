@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Recent Apps</string>
+    <string name="settings_title">Recent Apps Settings</string>
+
+    <string name="shortcut_recents_short">Recents</string>
+    <string name="shortcut_recents_long">Open Recent Apps</string>
+
+    <!-- Overlay -->
+    <string name="recent_apps">Recent apps</string>
+    <string name="kill_all">Kill all</string>
+    <string name="no_recent_apps">No recent apps</string>
+    <string name="no_recent_apps_sub">Apps you open will appear here.</string>
+
+    <!-- Settings -->
+    <string name="set_show_kill_all">Show Kill All</string>
+    <string name="set_show_kill_all_desc">A clear-all tile at the start of the row.</string>
+    <string name="set_size">Size of task</string>
+    <string name="set_size_desc">Scales every card in the overlay.</string>
+    <string name="set_shape">Shape of task</string>
+    <string name="set_shape_desc">Corner style of every card.</string>
+    <string name="set_exceptions">Exceptions</string>
+
+    <!-- Shizuku gate -->
+    <string name="shz_badge">Permission required</string>
+    <string name="shz_title">Shizuku isn\'t running</string>
+    <string name="shz_body">This app reads the running task list through Shizuku. Start the Shizuku service and grant access to see your recent apps.</string>
+    <string name="shz_open">Open Shizuku &amp; grant</string>
+    <string name="shz_retry">Retry</string>
+</resources>

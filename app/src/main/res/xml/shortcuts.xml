@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="open_recents"
+        android:enabled="true"
+        android:icon="@drawable/ic_recents"
+        android:shortcutShortLabel="@string/shortcut_recents_short"
+        android:shortcutLongLabel="@string/shortcut_recents_long">
+        <intent
+            android:action="com.websnake.recentstv.OPEN_RECENTS"
+            android:targetPackage="com.websnake.recentstv"
+            android:targetClass="com.websnake.recentstv.RecentsActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>
