@@ -274,7 +274,9 @@ class RecentsActivity : ComponentActivity() {
         when (code) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> { peekDir = -1; moveFocus(-1) }   // toward Kill-All
             KeyEvent.KEYCODE_DPAD_LEFT -> { peekDir = -1; moveFocus(+1) }    // toward older
-            KeyEvent.KEYCODE_DPAD_UP -> { peekDir = -1; gearFocused = true } // UP → settings gear
+            KeyEvent.KEYCODE_DPAD_UP ->
+                if (peekDir == 1) peekDir = -1          // cancel a pending peek → card back to normal
+                else gearFocused = true                 // otherwise UP → settings gear
             KeyEvent.KEYCODE_DPAD_DOWN -> if (!isKillAllAt(focus)) dismissStep(1)  // DOWN → dismiss/kill flow
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> activate()
         }
