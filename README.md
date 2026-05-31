@@ -17,9 +17,11 @@ runtime (no root required).
 
 - **RTL icon carousel** over the running app — Kill-All tile pinned far-right, most-recent
   app next to it, older apps flowing left; the strip clamps so Kill-All is always visible.
-- **D-pad only**: ←/→ move focus, **OK** switches to that app, **Up/Up** swipe-to-dismiss a
-  single task (with a *"Press again to remove"* hint), **OK** on Kill-All clears everything,
-  **Back** closes the overlay.
+  The focused app's name is shown as a single label centered along the bottom.
+- **D-pad only**:
+  - **← / →** move focus · **OK** switch to that app · **OK on Kill-All** clears everything · **Back** closes.
+  - **Down** arms the kill flow: the card peeks with a *"Press again to remove"* hint; **Down again** flies it off and removes it. **Up** while peeking cancels.
+  - **Up** (when not peeking) jumps focus to the **settings gear** (top-right).
 - **Long-press OK** on a card → context menu: **Add to exceptions**, **Kill app**, **App info**.
 - **Real removal** — removes *every* task for an app (apps can own several) and, optionally,
   **force-stops** it so it can't relaunch. Disabled/uninstalled apps are filtered out.
