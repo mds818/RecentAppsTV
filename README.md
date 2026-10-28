@@ -65,8 +65,6 @@ Use JDK 17 and Android SDK platform/build-tools 35. Keys and machine-specific Ja
 
 Alternatively configure JAVA_HOME/local.properties and run gradlew.bat assembleDebug or assembleRelease. Release output is unsigned until signed externally; see [signing](docs/SIGNING.md) and [validation](docs/VALIDATION.md).
 
-## Attribution and status
+## Credits
 
-Based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV), with original attribution retained and no upstream endorsement claimed. The upstream repository had no declared license when checked. This is an unofficial bugfix fork with limited planned maintenance. Upstream licensing has not been clarified; no permission from the upstream author or blanket license for their code is asserted. See [attribution](UPSTREAM.md) and [dependency notices](THIRD_PARTY_NOTICES.md).
-
-No screenshots, device logs, personal profiles or installed-app inventories are included. Screenshots can be added later after privacy review.
+Based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV). See [attribution and licensing notes](UPSTREAM.md) and [dependency notices](THIRD_PARTY_NOTICES.md).
