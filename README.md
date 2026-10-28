@@ -67,4 +67,4 @@ Alternatively configure JAVA_HOME/local.properties and run gradlew.bat assembleD
 
 ## Credits
 
-Based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV). See [attribution and licensing notes](UPSTREAM.md) and [dependency notices](THIRD_PARTY_NOTICES.md).
+Based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV). See [project attribution](UPSTREAM.md) and [dependency notices](THIRD_PARTY_NOTICES.md).
