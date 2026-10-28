@@ -6,6 +6,10 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
+## Updates
+
+Version 1.0.1 adds **About → Updates**, with optional startup checks and optional in-app update messages. Downloads and installation start only when you choose them. See [update settings and installation](docs/UPDATES.md).
+
 ## Choose your everyday look
 
 Four presets, shown with the same selected app and background. Click a picture to view it at full size.

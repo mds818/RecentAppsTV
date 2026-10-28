@@ -23,10 +23,12 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Runs against the installed app. Exercises complete held/repeated/released key sequences. */
 public class InputSmokeTest extends Instrumentation {
     private boolean presetsOnly;
+    private boolean animationOnly;
     private boolean stabilityOnly;
     private boolean closingOnly;
     @Override public void onCreate(Bundle args) {
         super.onCreate(args);
+        animationOnly=args!=null && "true".equals(args.getString("animationOnly"));
         presetsOnly=args!=null && "true".equals(args.getString("presetsOnly"));
         stabilityOnly=args!=null && "true".equals(args.getString("stabilityOnly"));
         closingOnly=args!=null && "true".equals(args.getString("closingOnly"));
@@ -339,8 +341,8 @@ public class InputSmokeTest extends Instrumentation {
         tap(settings,KeyEvent.KEYCODE_BACK);
         require(before.equals(value(settings,"getSettings")),"BACK from Apply changed settings");
         pass("Preset review is cancel-first; held OK, Cancel and BACK do not change settings");
-        String[] visual={"Position","Direction","Size","Shape","CardPadding","Accent","CustomAccent","BgDim","BgTint","ShowHeader","ShowSettingsButton","ShowHelp","ShowAppNames","AppDetailsMode","CloseHintStyle","SmoothMotion","KillAllLocation"};
-        String[] kept={"Exceptions","ProtectedApps","ProtectIndividualCloses","ConfirmKillAll","ForceStopOnKill","UsePrivileged"};
+        String[] visual={"Position","Direction","Size","Shape","CardPadding","Accent","CustomAccent","BgDim","BgTint","ShowHeader","ShowSettingsButton","ShowHelp","ShowAppNames","AppTextPosition","AppDetailsMode","CloseHintStyle","SmoothMotion","CloseAnimationSpeed","KillAllLocation"};
+        String[] kept={"Exceptions","ProtectedApps","ProtectIndividualCloses","ExcludeHiddenFromKillAll","ConfirmKillAll","ForceStopOnKill","UsePrivileged","AutoCheckUpdates","ShowUpdateNotification"};
         RecentsSettings last=before;
         for(com.websnake.recentstv.data.AppearancePreset preset:com.websnake.recentstv.data.AppearancePreset.values()) {
             if(preset.ordinal()>0) tap(settings,KeyEvent.KEYCODE_DPAD_DOWN);
@@ -588,6 +590,36 @@ public class InputSmokeTest extends Instrumentation {
     }
 
     @Override public void onStart() {
+        if(animationOnly) {
+            Bundle result=new Bundle();
+            try {
+                Activity recents=open(RecentsActivity.class);
+                SystemClock.sleep(2000);
+                awaitMode(recents,"OVERLAY",false);
+                saveScreen("animation-before.png");
+                // History mode is mandatory here: this tests drawing/timing only,
+                // and the completion callback cannot remove a real Android task.
+                require(Boolean.FALSE.equals(value(recents,"getPrivileged")),"Animation-only test requires history mode");
+                List<RecentTask> tasks=(List<RecentTask>)value(recents,"getTasks");
+                require(!tasks.isEmpty(),"No preview card to animate");
+                boolean motion=((RecentsSettings)value(recents,"getSettings")).getSmoothMotion();
+                runOnMainSync(() -> {
+                    try {
+                        Method setter=recents.getClass().getDeclaredMethod("setDismissing",kotlin.Pair.class);
+                        setter.setAccessible(true);setter.invoke(recents,new kotlin.Pair<Integer,Integer>(tasks.get(0).getTaskId(),1));
+                    } catch(Exception e) { throw new RuntimeException(e); }
+                });
+                long started=SystemClock.uptimeMillis();
+                SystemClock.sleep(motion?((RecentsSettings)value(recents,"getSettings")).getCloseAnimationSpeed().getDurationMs()-50:100);
+                if(motion) require(value(recents,"getDismissing")!=null,"Animation ended before the visible drop completed");
+                while(value(recents,"getDismissing")!=null && SystemClock.uptimeMillis()-started<5000) SystemClock.sleep(20);
+                saveScreen("animation-after.png");
+                require(value(recents,"getDismissing")==null,"Dismissal animation did not complete; scene="+value(recents,"getScene"));
+                result.putString("stream","PASS: motion="+motion+" animation lifecycle; no real task was closed\n");
+                result.putBoolean("passed",true);finish(Activity.RESULT_OK,result);
+            } catch(Throwable e) { result.putString("stream",android.util.Log.getStackTraceString(e));result.putBoolean("passed",false);finish(Activity.RESULT_CANCELED,result); }
+            return;
+        }
         if(closingOnly) {
             Bundle result=new Bundle();
             try { testClosing();result.putBoolean("passed",true);finish(Activity.RESULT_OK,result); }
@@ -803,5 +835,6 @@ public class InputSmokeTest extends Instrumentation {
         }
     }
 }
+
 
 

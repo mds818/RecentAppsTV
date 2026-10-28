@@ -102,8 +102,10 @@ fun RecentsOverlay(
     showSettingsButton: Boolean,
     showHelp: Boolean,
     showAppNames: Boolean,
+    appTextPosition: com.websnake.recentstv.data.AppTextPosition,
     showAppDetails: Boolean,
     smoothMotion: Boolean,
+    closeAnimationMs: Int,
     onDismissComplete: (Int) -> Unit,
 ) {
     val density = LocalDensity.current
@@ -205,7 +207,7 @@ fun RecentsOverlay(
                                     AppCard(
                                         task = item.task, focused = isFocused,
                                         peekDir = if (isFocused) peekDir else -1,
-                                        flyDir = dir, killing = killing && item.task.packageName !in protectedApps,
+                                        closeAnimationMs = closeAnimationMs, flyDir = dir, killing = killing && item.task.packageName !in protectedApps,
                                         staggerIndex = items.take(logicalIndex).count { it is OverlayItem.Card && it.task.packageName !in protectedApps },
                                         size = size, shape = shape,
                                         onFlyComplete = { onDismissComplete(item.task.taskId) },
@@ -217,14 +219,26 @@ fun RecentsOverlay(
                 }
             }
         }
-        // ── single focused-app label, centered along the bottom of the screen ──
+        // Names and details move together; footer guidance reserves its own space.
         if (focusedTask != null || killSelected) {
+            val bottomText = appTextPosition == com.websnake.recentstv.data.AppTextPosition.BOTTOM
+            val labelWidth = minOf(320.dp, maxWidth - 32.dp)
+            val halfLabelPx = with(density) { labelWidth.toPx() / 2f }
+            val labelCenterPx = if (position == FocusPosition.SIDE) viewportPx / 2f
+                else (centerPx + txAnim.value).coerceIn(halfLabelPx, viewportPx - halfLabelPx)
+            val textTop = minOf(maxHeight / 2 + size.dp * 0.78f + 56.dp * peekAmount.value,
+                maxHeight - if (showHelp) 98.dp else 62.dp).coerceAtLeast(16.dp)
+            val textModifier = if (bottomText) {
+                Modifier.align(Alignment.BottomCenter).padding(bottom = if (showHelp) 82.dp else 46.dp).fillMaxWidth(0.8f)
+            } else {
+                Modifier.align(Alignment.TopCenter)
+                    .offset { IntOffset((labelCenterPx - viewportPx / 2f).roundToInt(), with(density) { textTop.roundToPx() }) }
+                    .width(labelWidth)
+            }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .padding(top = maxHeight / 2 + size.dp * 0.78f + 56.dp * peekAmount.value)
-                    .fillMaxWidth(0.8f),
+                modifier = textModifier,
             ) {
                 if (focusedTask == null || showAppNames) Text(focusedTask?.label ?: "Kill all", style = Type.title, color = Tokens.text, maxLines = 1, textAlign = TextAlign.Center)
                 if (showAppDetails && focusedTask != null && focusedTask.category.isNotBlank()) {
@@ -299,6 +313,7 @@ private fun AppCard(
     focused: Boolean,
     peekDir: Int,
     flyDir: Int?,
+    closeAnimationMs: Int,
     killing: Boolean,
     staggerIndex: Int,
     size: CardSizeOpt,
@@ -318,8 +333,12 @@ private fun AppCard(
         if (flyDir != null) {
             val target = with(density) { 360.dp.toPx() } * if (flyDir == 0) -1 else 1
             kotlinx.coroutines.coroutineScope {
-                launch { fly.animateTo(target, tween(if (motion) 240 else 0)) }
-                launch { flyAlpha.animateTo(0f, tween(if (motion) 240 else 0)) }
+                launch { fly.animateTo(target, tween(if (motion) closeAnimationMs else 0,
+                    easing = androidx.compose.animation.core.FastOutLinearInEasing)) }
+                launch {
+                    if (motion) delay((closeAnimationMs * 0.4f).toLong())
+                    flyAlpha.animateTo(0f, tween(if (motion) closeAnimationMs - (closeAnimationMs * 0.4f).toInt() else 0))
+                }
             }
             onFlyComplete()
         }
@@ -335,7 +354,12 @@ private fun AppCard(
         }
     }
 
-    val peekOffset = animateFloatAsState(when (peekDir) { 0 -> -peekPx; 1 -> peekPx; else -> 0f },
+    val peekOffset = animateFloatAsState(when {
+        flyDir != null -> if (flyDir == 0) -peekPx else peekPx
+        peekDir == 0 -> -peekPx
+        peekDir == 1 -> peekPx
+        else -> 0f
+    },
         tween(if (motion) 200 else 0, easing = ease), label = "card-peek")
 
     // Fixed footprint = exactly one card; glow/chevron overflow via requiredSize.

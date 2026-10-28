@@ -20,6 +20,12 @@ import com.websnake.recentstv.ui.settings.SettingsMenu
 import com.websnake.recentstv.ui.settings.AppearancePresetsScreen
 import com.websnake.recentstv.ui.settings.ApplyPresetDialog
 import com.websnake.recentstv.ui.settings.AboutScreen
+import com.websnake.recentstv.ui.settings.aboutActions
+import com.websnake.recentstv.ui.settings.updateActions
+import com.websnake.recentstv.ui.settings.AboutAction
+import com.websnake.recentstv.updates.UpdateManager
+import com.websnake.recentstv.updates.UpdatePhase
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.websnake.recentstv.ui.settings.ExceptionsScreen
 import com.websnake.recentstv.ui.settings.SetRow
 import com.websnake.recentstv.ui.settings.SettingsScreen
@@ -37,7 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class SetScreen { SETTINGS, EXCEPTIONS, PROTECTED, PRESETS, ABOUT }
+private enum class SetScreen { SETTINGS, EXCEPTIONS, PROTECTED, PRESETS, ABOUT, UPDATES }
 
 class SettingsActivity : ComponentActivity() {
 
@@ -50,6 +56,9 @@ class SettingsActivity : ComponentActivity() {
     private var section by mutableStateOf<SettingsSection?>(null)
     private var rootFocus by mutableIntStateOf(0)
     private var presetFocus by mutableIntStateOf(0)
+    private var aboutFocus by mutableIntStateOf(0)
+    private var updateFocus by mutableIntStateOf(0)
+    private var installAllowed by mutableStateOf(false)
     private var presetPrompt by mutableStateOf(false)
     private var confirmPreset by mutableStateOf(false)
     private var canRestoreAppearance by mutableStateOf(false)
@@ -69,6 +78,7 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        UpdateManager.checkOnce(applicationContext)
         store = SettingsStore(applicationContext)
         pkgRepo = PackageRepository(applicationContext)
         val packageInfo = packageManager.getPackageInfo(packageName, 0)
@@ -95,7 +105,8 @@ class SettingsActivity : ComponentActivity() {
             RecentsTheme(accent = if (colorPrompt) AccentChart.colors[chartFocus] else settings.accentColor) {
                 when (screen) {
                     SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance)
-                    SetScreen.ABOUT -> AboutScreen(version)
+                    SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings)
+                    SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true)
                     SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus) else SettingsScreen(
                         settings = settings,
                         section = section!!,
@@ -119,6 +130,28 @@ class SettingsActivity : ComponentActivity() {
                 if (resetPrompt) com.websnake.recentstv.ui.settings.ResetDefaultsDialog(confirmReset)
                 if (colorPrompt) AccentColorChart(chartFocus)
                 if (presetPrompt) ApplyPresetDialog(AppearancePreset.entries.getOrNull(presetFocus), confirmPreset)
+            }
+        }
+    }
+
+    private fun aboutAction() {
+        val action = if (screen == SetScreen.UPDATES) updateActions[updateFocus] else aboutActions[aboutFocus]
+        val update = UpdateManager.state.value
+        when (action) {
+            AboutAction.UPDATES -> { updateFocus = 0; screen = SetScreen.UPDATES }
+            AboutAction.AUTO_CHECK -> persist { store.toggleAutoCheckUpdates() }
+            AboutAction.NOTIFY -> persist { store.toggleUpdateNotification() }
+            AboutAction.CHECK -> if (update.phase == UpdatePhase.DOWNLOADING) UpdateManager.cancelDownload() else UpdateManager.check(this)
+            AboutAction.INSTALL -> when (update.phase) {
+                UpdatePhase.AVAILABLE, UpdatePhase.ERROR -> UpdateManager.download(this)
+                UpdatePhase.READY -> if (UpdateManager.canInstall(this)) UpdateManager.install(this) else UpdateManager.requestInstallPermission(this)
+                UpdatePhase.CONFIRM -> UpdateManager.continueInstall(this)
+                else -> {}
+            }
+            else -> try {
+                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(action.url)))
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(this, "No browser is available. Open ${action.url} on another device.", android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -200,7 +233,8 @@ class SettingsActivity : ComponentActivity() {
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
-            if (screen != SetScreen.SETTINGS) {
+            if (screen == SetScreen.UPDATES) { screen = SetScreen.ABOUT }
+            else if (screen != SetScreen.SETTINGS) {
                 appsLoadGeneration++; appsLoadJob?.cancel(); appsLoading = false
                 screen = SetScreen.SETTINGS
             }
@@ -220,7 +254,16 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }
             }
-            SetScreen.ABOUT -> {} // Read-only. BACK returns to the same root row.
+            SetScreen.UPDATES -> when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> updateFocus = (updateFocus - 1).coerceAtLeast(0)
+                KeyEvent.KEYCODE_DPAD_DOWN -> updateFocus = (updateFocus + 1).coerceAtMost(updateActions.lastIndex)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> aboutAction()
+            }
+            SetScreen.ABOUT -> when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> aboutFocus = (aboutFocus - 1).coerceAtLeast(0)
+                KeyEvent.KEYCODE_DPAD_DOWN -> aboutFocus = (aboutFocus + 1).coerceAtMost(aboutActions.lastIndex)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> aboutAction()
+            }
         }
         return true
     }
@@ -235,7 +278,7 @@ class SettingsActivity : ComponentActivity() {
                     when (rootFocus) {
                         SettingsMenu.reset -> { confirmReset = false; resetPrompt = true }
                         SettingsMenu.presets -> { presetFocus = 0; screen = SetScreen.PRESETS }
-                        SettingsMenu.about -> screen = SetScreen.ABOUT
+                        SettingsMenu.about -> { aboutFocus = 0; screen = SetScreen.ABOUT }
                         else -> { section = SettingsSection.entries[rootFocus]; setFocus = 0 }
                     }
                 }
@@ -293,8 +336,10 @@ class SettingsActivity : ComponentActivity() {
             SetRow.HEADER -> persist { store.setShowHeader(dir > 0) }
             SetRow.SETTINGS_BUTTON -> persist { store.setShowSettingsButton(dir > 0) }
             SetRow.APP_NAMES -> persist { store.setAppNames(dir > 0) }
+            SetRow.APP_TEXT_POSITION -> persist { store.adjustAppTextPosition(dir) }
             SetRow.APP_DETAILS -> persist { store.adjustAppDetailsMode(dir) }
             SetRow.CLOSE_HINT -> persist { store.adjustCloseHintStyle(dir) }
+            SetRow.CLOSE_SPEED -> persist { store.adjustCloseAnimationSpeed(dir) }
             SetRow.HELP -> persist { store.setShowHelp(dir > 0) }
             SetRow.MOTION -> persist { store.setSmoothMotion(dir > 0) }
             SetRow.PRIVILEGED -> persist { store.setUsePrivileged(dir > 0) }
@@ -303,6 +348,8 @@ class SettingsActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
+        UpdateManager.onResume(this)
+        installAllowed = UpdateManager.canInstall(this)
         statusJob?.cancel()
         statusJob = lifecycleScope.launch {
             while (true) {
@@ -320,6 +367,7 @@ class SettingsActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        UpdateManager.onPause(this)
         statusJob?.cancel()
         super.onPause()
     }

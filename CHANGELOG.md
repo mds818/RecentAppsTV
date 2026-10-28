@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.1 — 2026-10-28
+
+- Add About links and an Updates submenu: optional once-per-process startup check, optional in-app update notice, manual checking, verified downloads and Android-confirmed installation. Allow automatic installation location for adopted USB storage; actual Shield USB testing remains pending.
+- Group Apps settings into Closing, Protection and Visibility. Keep hidden-app Kill All exclusion immediately beneath App exceptions.
+
+- Add Close animation speed: Normal (240 ms, default) or Slow (350 ms) for recording. Fade starts after 40% of the accelerating drop. Keep the close-preview offset through dismissal to avoid an upward twitch; row movement starts after the drop. Motion Off remains immediate.
+
+- Add independent app-text placement: under the selected app or at the bottom of the screen. Names and details move together, with separate space for control hints. In Side selection mode, text stays horizontally centered even at the first and last app.
+- Classic uses Medium rounded cards, 60% Charcoal dimming, bottom text, wide padding, elevated close hint and visible settings button and hidden control hints.
+- Default/Clean keep text beneath the selected app; Clean+ keeps labels hidden.
+
+
 ## 1.0.0
 
 - Add “Exclude hidden apps from Kill All”, enabled by default; protected apps remain excluded regardless.

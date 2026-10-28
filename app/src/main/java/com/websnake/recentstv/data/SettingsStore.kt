@@ -15,7 +15,10 @@ enum class AppDetailsMode { OFF, ALWAYS, PRIVILEGED_ONLY;
     fun visible(privileged: Boolean) = this == ALWAYS || (this == PRIVILEGED_ONLY && privileged)
 }
 enum class KillAllLocation { APP_ROW, TOP_CONTROLS, HIDDEN }
+enum class AppTextPosition { UNDER_APP, BOTTOM }
+
 enum class CloseHintStyle { ELEVATED, MINIMAL }
+enum class CloseAnimationSpeed(val durationMs: Int) { NORMAL(240), SLOW(350) }
 
 /** Defaults form one profile; clearing preferences restores exactly these values. */
 data class RecentsSettings(
@@ -39,10 +42,14 @@ data class RecentsSettings(
     val showSettingsButton: Boolean = true,
     val showHelp: Boolean = true,
     val showAppNames: Boolean = true,
+    val appTextPosition: AppTextPosition = AppTextPosition.UNDER_APP,
     val appDetailsMode: AppDetailsMode = AppDetailsMode.PRIVILEGED_ONLY,
     val closeHintStyle: CloseHintStyle = CloseHintStyle.MINIMAL,
     val smoothMotion: Boolean = true,
+    val closeAnimationSpeed: CloseAnimationSpeed = CloseAnimationSpeed.NORMAL,
     val usePrivileged: Boolean = true,
+    val autoCheckUpdates: Boolean = true,
+    val showUpdateNotification: Boolean = true,
 ) {
     val accentColor get() = customAccent?.let { androidx.compose.ui.graphics.Color(it) } ?: accent.color
 }
@@ -58,6 +65,7 @@ class SettingsStore(context: Context) {
         val killAllLocation = stringPreferencesKey("kill_all_location")
         val appDetailsMode = stringPreferencesKey("app_details_mode")
         val closeHintStyle = stringPreferencesKey("close_hint_style")
+        val closeAnimationSpeed = stringPreferencesKey("close_animation_speed")
         val size = stringPreferencesKey("size")
         val shape = stringPreferencesKey("shape")
         val cardPadding = stringPreferencesKey("card_padding")
@@ -75,15 +83,18 @@ class SettingsStore(context: Context) {
         val showSettingsButton = booleanPreferencesKey("show_settings_button")
         val showHelp = booleanPreferencesKey("show_help")
         val showAppNames = booleanPreferencesKey("show_app_names")
+        val appTextPosition = stringPreferencesKey("app_text_position")
         val showAppDetails = booleanPreferencesKey("show_app_details")
         val smooth = booleanPreferencesKey("smooth_motion")
         val usePrivileged = booleanPreferencesKey("use_privileged")
+        val autoCheckUpdates = booleanPreferencesKey("auto_check_updates")
+        val showUpdateNotification = booleanPreferencesKey("show_update_notification")
         val appearanceRestore = stringPreferencesKey("appearance_before_presets")
     }
     // Save raw appearance keys, including absent values and legacy fallbacks, so
     // Restore reproduces the pre-preset look without touching operational choices.
     private val appearanceStrings = listOf(Keys.legacyLayout, Keys.position, Keys.direction,
-        Keys.killAllLocation, Keys.appDetailsMode, Keys.closeHintStyle, Keys.size,
+        Keys.killAllLocation, Keys.appTextPosition, Keys.appDetailsMode, Keys.closeHintStyle, Keys.closeAnimationSpeed, Keys.size,
         Keys.shape, Keys.cardPadding, Keys.accent, Keys.bgTint)
     private val appearanceBooleans = listOf(Keys.showKillAll, Keys.showHeader,
         Keys.showSettingsButton, Keys.showHelp, Keys.showAppNames, Keys.showAppDetails, Keys.smooth)
@@ -136,10 +147,14 @@ class SettingsStore(context: Context) {
             showSettingsButton = p[Keys.showSettingsButton] ?: defaults.showSettingsButton,
             showHelp = p[Keys.showHelp] ?: defaults.showHelp,
             showAppNames = p[Keys.showAppNames] ?: defaults.showAppNames,
+            appTextPosition = enumValue(p[Keys.appTextPosition], defaults.appTextPosition),
             appDetailsMode = enumValue(p[Keys.appDetailsMode], legacyDetails),
             closeHintStyle = enumValue(p[Keys.closeHintStyle], defaults.closeHintStyle),
             smoothMotion = p[Keys.smooth] ?: defaults.smoothMotion,
+            closeAnimationSpeed = enumValue(p[Keys.closeAnimationSpeed], defaults.closeAnimationSpeed),
             usePrivileged = p[Keys.usePrivileged] ?: defaults.usePrivileged,
+            autoCheckUpdates = p[Keys.autoCheckUpdates] ?: defaults.autoCheckUpdates,
+            showUpdateNotification = p[Keys.showUpdateNotification] ?: defaults.showUpdateNotification,
         )
     }
     // Read/modify/write in one serialized transaction, so fast remote repeats cannot
@@ -164,7 +179,9 @@ class SettingsStore(context: Context) {
     suspend fun adjustBgTint(dir: Int) = step(Keys.bgTint, dir, BgTint.entries) { it.bgTint }
     suspend fun adjustBgDim(dir: Int) = dataStore.edit { p -> p[Keys.bgDim] = (decode(p).bgDim + dir * 5).coerceIn(0, 100) }
     suspend fun adjustKillAllLocation(dir: Int) = step(Keys.killAllLocation, dir, KillAllLocation.entries) { it.killAllLocation }
+    suspend fun adjustAppTextPosition(dir: Int) = step(Keys.appTextPosition, dir, AppTextPosition.entries) { it.appTextPosition }
     suspend fun adjustAppDetailsMode(dir: Int) = step(Keys.appDetailsMode, dir, AppDetailsMode.entries) { it.appDetailsMode }
+    suspend fun adjustCloseAnimationSpeed(dir: Int) = step(Keys.closeAnimationSpeed, dir, CloseAnimationSpeed.entries) { it.closeAnimationSpeed }
     suspend fun adjustCloseHintStyle(dir: Int) = step(Keys.closeHintStyle, dir, CloseHintStyle.entries) { it.closeHintStyle }
     suspend fun toggleForceStop() = toggle(Keys.forceStop) { it.forceStopOnKill }
     suspend fun toggleHiddenKillExclusion() = toggle(Keys.excludeHiddenFromKillAll) { it.excludeHiddenFromKillAll }
@@ -197,9 +214,11 @@ class SettingsStore(context: Context) {
         p[Keys.showSettingsButton] = look.showSettingsButton
         p[Keys.showHelp] = look.showHelp
         p[Keys.showAppNames] = look.showAppNames
+        p[Keys.appTextPosition] = look.appTextPosition.name
         p[Keys.appDetailsMode] = look.appDetailsMode.name
         p[Keys.closeHintStyle] = look.closeHintStyle.name
         p[Keys.smooth] = look.smoothMotion
+        p[Keys.closeAnimationSpeed] = look.closeAnimationSpeed.name
         p[Keys.killAllLocation] = look.killAllLocation.name
         // Service use, force-stop, confirmation and app protection are deliberately untouched.
     }
@@ -241,6 +260,8 @@ class SettingsStore(context: Context) {
     suspend fun setShowHelp(v: Boolean) = dataStore.edit { it[Keys.showHelp] = v }
     suspend fun setSmoothMotion(v: Boolean) = dataStore.edit { it[Keys.smooth] = v }
     suspend fun setUsePrivileged(v: Boolean) = dataStore.edit { it[Keys.usePrivileged] = v }
+    suspend fun toggleAutoCheckUpdates() = toggle(Keys.autoCheckUpdates) { it.autoCheckUpdates }
+    suspend fun toggleUpdateNotification() = toggle(Keys.showUpdateNotification) { it.showUpdateNotification }
     suspend fun toggleException(pkg: String) = dataStore.edit { p ->
         val cur = (p[Keys.exceptions] ?: emptySet()).toMutableSet()
         if (!cur.remove(pkg)) cur.add(pkg)

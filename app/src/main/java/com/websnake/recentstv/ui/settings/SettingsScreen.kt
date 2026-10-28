@@ -18,15 +18,15 @@ import com.websnake.recentstv.data.RecentsSettings
 import com.websnake.recentstv.ui.theme.*
 
 enum class SetRow(val section: String? = null) {
-    POSITION("Appearance"), DIRECTION, SIZE, SHAPE, PADDING, ACCENT, BG_DIM, BG_TINT, HEADER, SETTINGS_BUTTON, HELP, APP_NAMES, APP_DETAILS, MOTION,
+    POSITION("Appearance"), DIRECTION, SIZE, SHAPE, PADDING, ACCENT, BG_DIM, BG_TINT, HEADER, SETTINGS_BUTTON, HELP, APP_NAMES, APP_TEXT_POSITION, APP_DETAILS, MOTION, CLOSE_SPEED,
     EXCEPTIONS("Apps"),
     PRIVILEGED("Advanced · Shizuku / Porter"), MANAGER, KILL_ALL, FORCE_STOP,
     CLOSE_HINT, HIDDEN_KILL_EXCLUSION, PROTECTED_APPS, INDIVIDUAL_PROTECTION, CONFIRM_KILL_ALL, RESET("Defaults")
 }
 
 enum class SettingsSection(val title: String, val description: String, val rows: List<SetRow>) {
-    APPEARANCE("Appearance", "Cards, colors, layout and app labels", listOf(SetRow.POSITION, SetRow.DIRECTION, SetRow.SIZE, SetRow.SHAPE, SetRow.PADDING, SetRow.ACCENT, SetRow.BG_DIM, SetRow.BG_TINT, SetRow.HEADER, SetRow.APP_NAMES, SetRow.APP_DETAILS)),
-    CONTROLS("Controls", "Settings access, close hint and motion", listOf(SetRow.SETTINGS_BUTTON, SetRow.CLOSE_HINT, SetRow.HELP, SetRow.MOTION)),
+    APPEARANCE("Appearance", "Cards, colors, layout and app labels", listOf(SetRow.POSITION, SetRow.DIRECTION, SetRow.SIZE, SetRow.SHAPE, SetRow.PADDING, SetRow.ACCENT, SetRow.BG_DIM, SetRow.BG_TINT, SetRow.HEADER, SetRow.APP_NAMES, SetRow.APP_TEXT_POSITION, SetRow.APP_DETAILS)),
+    CONTROLS("Controls", "Settings access, close hint and motion", listOf(SetRow.SETTINGS_BUTTON, SetRow.CLOSE_HINT, SetRow.HELP, SetRow.MOTION, SetRow.CLOSE_SPEED)),
     APPS("Apps", "Kill All, protected apps and app exceptions", listOf(SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION, SetRow.EXCEPTIONS, SetRow.HIDDEN_KILL_EXCLUSION)),
     ADVANCED("Advanced", "Porter / Shizuku access and force-stop", listOf(SetRow.PRIVILEGED, SetRow.MANAGER, SetRow.FORCE_STOP));
     companion object { fun forRow(row: SetRow): SettingsSection? = entries.firstOrNull { row in it.rows } }
@@ -57,7 +57,7 @@ fun SettingsHome(focus: Int) {
                     } else if (index == SettingsMenu.presets || index == SettingsMenu.about) {
                         val presets = index == SettingsMenu.presets
                         SettingRow(if (presets) "Appearance presets" else "About",
-                            if (presets) "Default, Clean, Clean+ and Classic · restore previous look" else "Version, project and access modes",
+                            if (presets) "Default, Clean, Clean+ and Classic · restore previous look" else "Updates, project links and optional access tools",
                             focus == index, compact = true) {
                             Text("›", style = Type.title, color = Tokens.textDim)
                         }
@@ -87,6 +87,16 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                 items(section.rows.size) { index ->
                     val row = section.rows[index]
                     Column {
+                        if (section == SettingsSection.APPS) {
+                            val group = when (row) {
+                                SetRow.KILL_ALL -> "Closing"
+                                SetRow.PROTECTED_APPS -> "Protection"
+                                SetRow.EXCEPTIONS -> "Visibility"
+                                else -> null
+                            }
+                            if (group != null) Text(group, style = Type.small, color = LocalAccent.current.base,
+                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 6.dp))
+                        }
                         val title = when (row) {
                             SetRow.POSITION -> "Selection position"
                             SetRow.DIRECTION -> "Older apps appear"
@@ -98,11 +108,13 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                             SetRow.BG_TINT -> "Background color"
                             SetRow.HEADER -> "Show header"
                             SetRow.SETTINGS_BUTTON -> "Show settings button"
+                            SetRow.APP_TEXT_POSITION -> "App text position"
                             SetRow.APP_NAMES -> "Show app names"
                             SetRow.APP_DETAILS -> "App details"
                             SetRow.CLOSE_HINT -> "Close hint style"
                             SetRow.HELP -> "Show control hints"
                             SetRow.MOTION -> "Smooth motion"
+                            SetRow.CLOSE_SPEED -> "Close animation speed"
                             SetRow.HIDDEN_KILL_EXCLUSION -> "Exclude hidden apps from Kill All"
                             SetRow.EXCEPTIONS -> "App exceptions"
                             SetRow.PROTECTED_APPS -> "Protected apps"
@@ -125,11 +137,13 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                             SetRow.BG_TINT -> "Tint applied with the background dim."
                             SetRow.HEADER -> "Show the title, app count, and mode. The settings button has its own switch."
                             SetRow.SETTINGS_BUTTON -> "When hidden, press UP twice to open Settings."
+                            SetRow.APP_TEXT_POSITION -> "Place names and details under the selected app or at the bottom. Independent of control hints."
                             SetRow.APP_NAMES -> "Show the selected app name. Turn off for an icon-only view."
                             SetRow.APP_DETAILS -> "Privileged only shows details for actual tasks, with Porter or Shizuku."
                             SetRow.CLOSE_HINT -> "Style of the second-press hint beneath an app."
                             SetRow.HELP -> "Show remote-control hints along the bottom."
                             SetRow.MOTION -> "Animate focus and scrolling. Off gives immediate movement."
+                            SetRow.CLOSE_SPEED -> "Normal for daily use; Slow makes the drop clearer in recordings."
                             SetRow.HIDDEN_KILL_EXCLUSION -> "Privileged mode only. Off allows Kill All to close hidden apps; protected apps are always skipped."
                             SetRow.EXCEPTIONS -> exceptionsSummary
                             SetRow.PROTECTED_APPS -> protectedSummary
@@ -157,11 +171,13 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                                 SetRow.BG_TINT -> SwatchRow(BgTint.entries.map { it.color }, settings.bgTint.ordinal, ring = true)
                                 SetRow.HEADER -> Toggle(settings.showHeader)
                                 SetRow.SETTINGS_BUTTON -> Toggle(settings.showSettingsButton)
+                                SetRow.APP_TEXT_POSITION -> Segmented(listOf("Under app", "Bottom"), settings.appTextPosition.ordinal)
                                 SetRow.APP_NAMES -> Toggle(settings.showAppNames)
                                 SetRow.APP_DETAILS -> Segmented(listOf("Off", "Always", "Privileged only"), settings.appDetailsMode.ordinal)
                                 SetRow.CLOSE_HINT -> Segmented(listOf("Elevated", "Minimal"), settings.closeHintStyle.ordinal)
                                 SetRow.HELP -> Toggle(settings.showHelp)
                                 SetRow.MOTION -> Toggle(settings.smoothMotion)
+                                SetRow.CLOSE_SPEED -> Segmented(listOf("Normal", "Slow"), settings.closeAnimationSpeed.ordinal)
                                 SetRow.PRIVILEGED -> Toggle(settings.usePrivileged)
                                 SetRow.KILL_ALL -> Segmented(listOf("App row", "Top controls", "Hidden"), settings.killAllLocation.ordinal)
                                 SetRow.FORCE_STOP -> Toggle(settings.forceStopOnKill)

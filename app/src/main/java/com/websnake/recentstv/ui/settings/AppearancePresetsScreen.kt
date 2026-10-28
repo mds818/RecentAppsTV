@@ -55,6 +55,7 @@ fun ApplyPresetDialog(preset: AppearancePreset?, confirmSelected: Boolean) {
             Text(if (preset == null) "Restore previous appearance?" else "Apply ${preset.title}?", style = Type.title, color = Tokens.text)
             Text(preset?.description ?: "Return to the appearance you had before trying these presets.", style = Type.body, color = Tokens.textDim)
             Text(if (preset == null) "This uses your saved restore point. Applying another preset afterward will save a new one."
+                else if (preset == AppearancePreset.CLASSIC) "Medium rounded cards · Green · 60% Charcoal dim. Your previous appearance stays saved."
                 else "Large circular cards · Green · 80% dim. Your previous appearance stays saved until you restore it.",
                 style = Type.small, color = Tokens.textDim)
             if (preset == AppearancePreset.CLEAN_PLUS) Text("Settings stays available: press UP twice. Names and Kill All are hidden.",

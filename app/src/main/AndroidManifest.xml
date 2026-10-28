@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:installLocation="auto"
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature
@@ -15,6 +16,10 @@
     <!-- See labels/icons of all installed apps for the Exceptions list -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- GitHub checks/downloads; installation still requires Android approval. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".RecentsApp"
@@ -67,6 +72,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <receiver android:name=".updates.UpdateInstallReceiver" android:exported="false" />
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

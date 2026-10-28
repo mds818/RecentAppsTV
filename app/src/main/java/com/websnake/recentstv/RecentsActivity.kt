@@ -82,6 +82,7 @@ class RecentsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.websnake.recentstv.updates.UpdateManager.checkOnce(applicationContext)
         repo = RecentTasksRepository(applicationContext)
         store = SettingsStore(applicationContext)
         ShizukuManager.addPermissionListener(permListener)
@@ -120,8 +121,10 @@ class RecentsActivity : ComponentActivity() {
                             showSettingsButton = settings.showSettingsButton,
                             showHelp = settings.showHelp,
                             showAppNames = settings.showAppNames,
+                            appTextPosition = settings.appTextPosition,
                             showAppDetails = settings.appDetailsMode.visible(privileged),
                             smoothMotion = settings.smoothMotion,
+                            closeAnimationMs = settings.closeAnimationSpeed.durationMs,
                             onDismissComplete = ::onCardFlewOff,
                         )
                         ctxTask?.let { com.websnake.recentstv.ui.overlay.ContextMenu(it, ctxSelected, privileged, isIndividuallyProtected(it), it.packageName in settings.protectedApps, settings.excludeHiddenFromKillAll) }
@@ -136,6 +139,7 @@ class RecentsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.websnake.recentstv.updates.UpdateManager.onResume(this)
         reload()
         permissionWatch?.cancel()
         permissionWatch = lifecycleScope.launch {
@@ -151,6 +155,7 @@ class RecentsActivity : ComponentActivity() {
     private var permissionWatch: kotlinx.coroutines.Job? = null
 
     override fun onPause() {
+        com.websnake.recentstv.updates.UpdateManager.onPause(this)
         clearSettingsHint()
         killPrompt = false
         cancelCenterPress()
