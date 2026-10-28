@@ -1,6 +1,14 @@
 # Changelog
 
-## 1.14.0 — prepared candidate
+## 1.0.0
+
+- Add “Exclude hidden apps from Kill All”, enabled by default; protected apps remain excluded regardless.
+- Standardize project naming as RecentAppsTV (Fork), keeping the repository, app label and launcher identity.
+- Keep existing long-press timing and release-before-select protection.
+- Fix Linux build setup and Unix wrapper line endings.
+
+
+## Development history
 
 - Optional Porter/Shizuku with automatic UsageStats fallback and permission recovery.
 - Preserved application ID, TV launcher, navigation and task actions.

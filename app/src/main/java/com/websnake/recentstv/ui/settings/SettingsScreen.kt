@@ -21,13 +21,13 @@ enum class SetRow(val section: String? = null) {
     POSITION("Appearance"), DIRECTION, SIZE, SHAPE, PADDING, ACCENT, BG_DIM, BG_TINT, HEADER, SETTINGS_BUTTON, HELP, APP_NAMES, APP_DETAILS, MOTION,
     EXCEPTIONS("Apps"),
     PRIVILEGED("Advanced · Shizuku / Porter"), MANAGER, KILL_ALL, FORCE_STOP,
-    CLOSE_HINT, PROTECTED_APPS, INDIVIDUAL_PROTECTION, CONFIRM_KILL_ALL, RESET("Defaults")
+    CLOSE_HINT, HIDDEN_KILL_EXCLUSION, PROTECTED_APPS, INDIVIDUAL_PROTECTION, CONFIRM_KILL_ALL, RESET("Defaults")
 }
 
 enum class SettingsSection(val title: String, val description: String, val rows: List<SetRow>) {
     APPEARANCE("Appearance", "Cards, colors, layout and app labels", listOf(SetRow.POSITION, SetRow.DIRECTION, SetRow.SIZE, SetRow.SHAPE, SetRow.PADDING, SetRow.ACCENT, SetRow.BG_DIM, SetRow.BG_TINT, SetRow.HEADER, SetRow.APP_NAMES, SetRow.APP_DETAILS)),
     CONTROLS("Controls", "Settings access, close hint and motion", listOf(SetRow.SETTINGS_BUTTON, SetRow.CLOSE_HINT, SetRow.HELP, SetRow.MOTION)),
-    APPS("Apps", "Kill All, protected apps and app exceptions", listOf(SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION, SetRow.EXCEPTIONS)),
+    APPS("Apps", "Kill All, protected apps and app exceptions", listOf(SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION, SetRow.EXCEPTIONS, SetRow.HIDDEN_KILL_EXCLUSION)),
     ADVANCED("Advanced", "Porter / Shizuku access and force-stop", listOf(SetRow.PRIVILEGED, SetRow.MANAGER, SetRow.FORCE_STOP));
     companion object { fun forRow(row: SetRow): SettingsSection? = entries.firstOrNull { row in it.rows } }
 }
@@ -103,6 +103,7 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                             SetRow.CLOSE_HINT -> "Close hint style"
                             SetRow.HELP -> "Show control hints"
                             SetRow.MOTION -> "Smooth motion"
+                            SetRow.HIDDEN_KILL_EXCLUSION -> "Exclude hidden apps from Kill All"
                             SetRow.EXCEPTIONS -> "App exceptions"
                             SetRow.PROTECTED_APPS -> "Protected apps"
                             SetRow.INDIVIDUAL_PROTECTION -> "Protect individual closes"
@@ -129,6 +130,7 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                             SetRow.CLOSE_HINT -> "Style of the second-press hint beneath an app."
                             SetRow.HELP -> "Show remote-control hints along the bottom."
                             SetRow.MOTION -> "Animate focus and scrolling. Off gives immediate movement."
+                            SetRow.HIDDEN_KILL_EXCLUSION -> "Privileged mode only. Off allows Kill All to close hidden apps; protected apps are always skipped."
                             SetRow.EXCEPTIONS -> exceptionsSummary
                             SetRow.PROTECTED_APPS -> protectedSummary
                             SetRow.INDIVIDUAL_PROTECTION -> "Also protect chosen apps from DOWN and the context-menu close action."
@@ -164,6 +166,7 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                                 SetRow.KILL_ALL -> Segmented(listOf("App row", "Top controls", "Hidden"), settings.killAllLocation.ordinal)
                                 SetRow.FORCE_STOP -> Toggle(settings.forceStopOnKill)
                                 SetRow.RESET -> Text("Reset…", style = Type.small, color = Tokens.textDim)
+                                SetRow.HIDDEN_KILL_EXCLUSION -> Toggle(settings.excludeHiddenFromKillAll)
                                 SetRow.EXCEPTIONS -> Text("›", style = Type.title, color = Tokens.textDim)
                                 SetRow.PROTECTED_APPS -> Text("›", style = Type.title, color = Tokens.textDim)
                                 SetRow.INDIVIDUAL_PROTECTION -> Toggle(settings.protectIndividualCloses)

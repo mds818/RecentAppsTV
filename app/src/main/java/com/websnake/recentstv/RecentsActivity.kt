@@ -1,5 +1,7 @@
 package com.websnake.recentstv
 
+import com.websnake.recentstv.data.KillAllPolicy
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
@@ -122,9 +124,9 @@ class RecentsActivity : ComponentActivity() {
                             smoothMotion = settings.smoothMotion,
                             onDismissComplete = ::onCardFlewOff,
                         )
-                        ctxTask?.let { com.websnake.recentstv.ui.overlay.ContextMenu(it, ctxSelected, privileged, isIndividuallyProtected(it), it.packageName in settings.protectedApps) }
+                        ctxTask?.let { com.websnake.recentstv.ui.overlay.ContextMenu(it, ctxSelected, privileged, isIndividuallyProtected(it), it.packageName in settings.protectedApps, settings.excludeHiddenFromKillAll) }
                         if (killPrompt) com.websnake.recentstv.ui.overlay.KillAllConfirmation(
-                            killAllCandidates().size, tasks.count { it.packageName in settings.protectedApps },
+                            killAllCandidates().size, bulkTasks.count { it.packageName in settings.protectedApps },
                             settings.forceStopOnKill, confirmKill)
                     }
                 }
@@ -171,7 +173,10 @@ class RecentsActivity : ComponentActivity() {
     }
 
     // ── load / scene routing ───────────────────────────────────────────────
+    private var bulkTasks: List<RecentTask> = emptyList()
+
     private fun reload() {
+        bulkTasks = emptyList()
         clearSettingsHint()
         killPrompt = false
         cancelCenterPress()
@@ -190,12 +195,13 @@ class RecentsActivity : ComponentActivity() {
             }
             val useTasks = privileged
             val loaded = withContext(Dispatchers.IO) {
-                if (useTasks) repo.getRecentTasks(settings.exceptions)
+                if (useTasks) repo.getRecentTasks(emptySet())
                 else runCatching { repo.getRecentApps(settings.exceptions) }.getOrDefault(emptyList())
             }
             if (useTasks != repo.ready()) { reload(); return@launch }
             if (!useTasks && !repo.hasUsageAccess()) { scene = Scene.USAGE; return@launch }
-            tasks.clear(); tasks.addAll(loaded)
+            bulkTasks = if (useTasks) loaded else emptyList()
+            tasks.clear(); tasks.addAll(loaded.filterNot { it.packageName in settings.exceptions })
             // Reset ALL transient guards — otherwise a warm-reopened overlay (after a
             // switch set busy=true and finish()ed without process death) stays dead.
             killing = false; dismissing = null; peekDir = -1; gearFocused = false
@@ -380,13 +386,17 @@ class RecentsActivity : ComponentActivity() {
         ctxTask = null
         when (option) {
             0 -> {                                    // add to exceptions
-                lifecycleScope.launch { store.toggleException(task.packageName) }
-                removeFromView(task)
+                lifecycleScope.launch {
+                    store.toggleException(task.packageName)
+                    settings = store.settings.first()
+                    removeFromView(task)
+                }
             }
             1 -> {                                    // kill app
                 if (!privileged || !repo.ready()) return
                 if (isIndividuallyProtected(task)) { showProtectedNotice(); return }
                 removeFromView(task)
+                bulkTasks = bulkTasks.filterNot { it.packageName == task.packageName }
                 val fs = settings.forceStopOnKill
                 val protectedPackages = individualProtectionPackages()
                 actionJob = lifecycleScope.launch { withContext(Dispatchers.IO) { repo.dismiss(task, fs, protectedPackages) } }
@@ -512,6 +522,7 @@ class RecentsActivity : ComponentActivity() {
         // Remove from the UI immediately so the row collapses with no leftover gap;
         // the privileged removeTask runs in the background.
         tasks.removeAt(idx)
+        bulkTasks = bulkTasks.filterNot { it.packageName == task.packageName }
         dismissing = null
         peekDir = -1
         if (tasks.isEmpty()) scene = Scene.EMPTY
@@ -559,7 +570,7 @@ class RecentsActivity : ComponentActivity() {
         killPrompt = true
     }
 
-    private fun killAllCandidates() = tasks.filterNot { it.packageName in settings.protectedApps }
+    private fun killAllCandidates() = KillAllPolicy.candidates(bulkTasks, settings.exceptions, settings.protectedApps, settings.excludeHiddenFromKillAll)
 
     private fun individualProtectionPackages() = if (settings.protectIndividualCloses) settings.protectedApps else emptySet()
     private fun isIndividuallyProtected(task: RecentTask) = task.packageName in individualProtectionPackages()
@@ -592,6 +603,7 @@ class RecentsActivity : ComponentActivity() {
             if (remaining > 0) delay(remaining)
             val closedPackages = snapshot.mapTo(HashSet()) { it.packageName }
             tasks.removeAll { it.packageName in closedPackages }
+            bulkTasks = bulkTasks.filterNot { it.packageName in closedPackages }
             killing = false
             busy = false
             if (tasks.isEmpty()) scene = Scene.EMPTY

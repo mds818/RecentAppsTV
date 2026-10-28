@@ -34,7 +34,7 @@ import com.websnake.recentstv.ui.theme.Type
 
 /** Context actions use stable IDs: exceptions 0, close 1, protection 2, app info 3. */
 @Composable
-fun ContextMenu(task: RecentTask, selected: Int, canManageTasks: Boolean = true, closeProtected: Boolean = false, appProtected: Boolean = false) {
+fun ContextMenu(task: RecentTask, selected: Int, canManageTasks: Boolean = true, closeProtected: Boolean = false, appProtected: Boolean = false, excludeHiddenFromKillAll: Boolean = true) {
     val accent = LocalAccent.current
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
@@ -68,7 +68,7 @@ fun ContextMenu(task: RecentTask, selected: Int, canManageTasks: Boolean = true,
             }
             Spacer(Modifier.size(20.dp))
 
-            MenuRow("Add to exceptions", if (canManageTasks) "Hide from recents and exclude from Kill All" else "Hide this app from recents", selected == 0, accent.base)
+            MenuRow("Add to exceptions", if (canManageTasks && excludeHiddenFromKillAll) "Hide from recents and exclude from Kill All" else "Hide this app from recents", selected == 0, accent.base)
             if (canManageTasks) {
                 Spacer(Modifier.size(8.dp))
                 MenuRow("Close app", if (closeProtected) "Protected · change protection in Settings → Apps" else "Remove task; use the force-stop preference",

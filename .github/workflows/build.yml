@@ -19,4 +19,4 @@ jobs:
           packages: platform-tools
       - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: bash ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease lintDebug --console=plain
+      - run: bash ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease testDebugUnitTest lintDebug --console=plain

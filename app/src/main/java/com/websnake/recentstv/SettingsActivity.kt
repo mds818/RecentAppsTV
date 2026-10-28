@@ -110,6 +110,7 @@ class SettingsActivity : ComponentActivity() {
                         excluded = if (screen == SetScreen.PROTECTED) settings.protectedApps else settings.exceptions,
                         protection = screen == SetScreen.PROTECTED,
                         protectIndividual = settings.protectIndividualCloses,
+                        excludeHiddenFromKillAll = settings.excludeHiddenFromKillAll,
                         loading = appsLoading,
                         loadError = appsLoadError,
                         focus = excFocus,
@@ -249,6 +250,7 @@ class SettingsActivity : ComponentActivity() {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
                 when (activeSection.rows[setFocus]) {
                     SetRow.ACCENT -> { chartFocus = AccentChart.nearest(settings.accentColor); colorPrompt = true }
+                    SetRow.HIDDEN_KILL_EXCLUSION -> persist { store.toggleHiddenKillExclusion() }
                     SetRow.INDIVIDUAL_PROTECTION -> persist { store.toggleIndividualProtection() }
                     SetRow.CONFIRM_KILL_ALL -> persist { store.toggleKillAllConfirmation() }
                     SetRow.FORCE_STOP -> persist { store.toggleForceStop() }
@@ -284,6 +286,7 @@ class SettingsActivity : ComponentActivity() {
             SetRow.BG_DIM -> persist { store.adjustBgDim(dir) }
             SetRow.BG_TINT -> persist { store.adjustBgTint(dir) }
             SetRow.KILL_ALL -> persist { store.adjustKillAllLocation(dir) }
+            SetRow.HIDDEN_KILL_EXCLUSION -> persist { store.setHiddenKillExclusion(dir > 0) }
             SetRow.INDIVIDUAL_PROTECTION -> persist { store.setIndividualProtection(dir > 0) }
             SetRow.CONFIRM_KILL_ALL -> persist { store.setKillAllConfirmation(dir > 0) }
             SetRow.FORCE_STOP -> persist { store.setForceStop(dir > 0) }

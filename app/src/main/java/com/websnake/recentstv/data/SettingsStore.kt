@@ -28,6 +28,7 @@ data class RecentsSettings(
     val exceptions: Set<String> = emptySet(),
     val protectedApps: Set<String> = emptySet(),
     val protectIndividualCloses: Boolean = true,
+    val excludeHiddenFromKillAll: Boolean = true,
     val confirmKillAll: Boolean = true,
     val accent: AccentColor = AccentColor.GREEN,
     val customAccent: Int? = null,
@@ -63,6 +64,7 @@ class SettingsStore(context: Context) {
         val exceptions = stringSetPreferencesKey("exceptions")
         val protectedApps = stringSetPreferencesKey("protected_apps")
         val protectIndividualCloses = booleanPreferencesKey("protect_individual_closes")
+        val excludeHiddenFromKillAll = booleanPreferencesKey("exclude_hidden_from_kill_all")
         val confirmKillAll = booleanPreferencesKey("confirm_kill_all")
         val accent = stringPreferencesKey("accent")
         val customAccent = intPreferencesKey("custom_accent_argb")
@@ -123,6 +125,7 @@ class SettingsStore(context: Context) {
             exceptions = p[Keys.exceptions] ?: defaults.exceptions,
             protectedApps = p[Keys.protectedApps] ?: defaults.protectedApps,
             protectIndividualCloses = p[Keys.protectIndividualCloses] ?: defaults.protectIndividualCloses,
+            excludeHiddenFromKillAll = p[Keys.excludeHiddenFromKillAll] ?: defaults.excludeHiddenFromKillAll,
             confirmKillAll = p[Keys.confirmKillAll] ?: defaults.confirmKillAll,
             accent = enumValue(p[Keys.accent], defaults.accent),
             customAccent = p[Keys.customAccent] ?: if (p[Keys.accent] == "ICE_CYAN") 0xFFB3FFFF.toInt() else null,
@@ -164,6 +167,8 @@ class SettingsStore(context: Context) {
     suspend fun adjustAppDetailsMode(dir: Int) = step(Keys.appDetailsMode, dir, AppDetailsMode.entries) { it.appDetailsMode }
     suspend fun adjustCloseHintStyle(dir: Int) = step(Keys.closeHintStyle, dir, CloseHintStyle.entries) { it.closeHintStyle }
     suspend fun toggleForceStop() = toggle(Keys.forceStop) { it.forceStopOnKill }
+    suspend fun toggleHiddenKillExclusion() = toggle(Keys.excludeHiddenFromKillAll) { it.excludeHiddenFromKillAll }
+    suspend fun setHiddenKillExclusion(v: Boolean) = dataStore.edit { it[Keys.excludeHiddenFromKillAll] = v }
     suspend fun toggleIndividualProtection() = toggle(Keys.protectIndividualCloses) { it.protectIndividualCloses }
     suspend fun toggleKillAllConfirmation() = toggle(Keys.confirmKillAll) { it.confirmKillAll }
     suspend fun setIndividualProtection(v: Boolean) = dataStore.edit { it[Keys.protectIndividualCloses] = v }

@@ -1,4 +1,4 @@
-# RecentAppsTV-Fallback
+# RecentAppsTV (Fork)
 
 A remote-friendly recent-app switcher for Android TV and Google TV, based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV).
 
@@ -41,7 +41,7 @@ com.websnake.recentstv/.RecentsActivity
 | MENU | Open Settings |
 | BACK | Cancel or dismiss |
 
-When both top controls are visible, Kill All is left and Settings is right; UP focuses Settings first. Hidden apps are excluded from Kill All. Protected apps are always skipped by Kill All; individual protection has its own switch.
+When both top controls are visible, Kill All is left and Settings is right; UP focuses Settings first. Hidden apps are excluded from Kill All by default. Turn off “Exclude hidden apps from Kill All” in Settings → Apps to include them; protected apps are always skipped. Protected apps are always skipped by Kill All; individual protection has its own switch.
 
 ## Presets
 

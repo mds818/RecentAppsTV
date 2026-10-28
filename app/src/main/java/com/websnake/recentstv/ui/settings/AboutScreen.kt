@@ -12,7 +12,7 @@ import com.websnake.recentstv.ui.theme.*
 fun AboutScreen(version: String) {
     Column(Modifier.fillMaxSize().background(Tokens.bg).padding(horizontal = 60.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("About · Recent Apps TV", style = Type.title, color = Tokens.text)
+        Text("About · RecentAppsTV (Fork)", style = Type.title, color = Tokens.text)
         Text(version, style = Type.row, color = LocalAccent.current.base)
         Text("A recent-app switcher for Android TV and Google TV.", style = Type.body, color = Tokens.text)
         Text("With Porter / Shizuku", style = Type.label, color = Tokens.text)

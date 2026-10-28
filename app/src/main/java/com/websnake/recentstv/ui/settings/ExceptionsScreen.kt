@@ -48,6 +48,7 @@ fun ExceptionsScreen(
     focus: Int,
     protection: Boolean = false,
     protectIndividual: Boolean = true,
+    excludeHiddenFromKillAll: Boolean = true,
     loading: Boolean = false,
     loadError: Boolean = false,
 ) {
@@ -67,7 +68,8 @@ fun ExceptionsScreen(
                 if (protection) {
                     if (protectIndividual) "Chosen apps are protected from Kill All, DOWN and the context-menu close action."
                     else "Chosen apps are protected from Kill All. Individual closing is allowed."
-                } else "Hidden apps stay out of Recents and are skipped by Kill All. Hiding does not close them.",
+                } else if (excludeHiddenFromKillAll) "Hidden apps stay out of Recents and are skipped by Kill All. Hiding does not close them."
+                else "Hidden apps stay out of Recents. Kill All can close them unless protected. Hiding does not close them.",
                 style = Type.body, color = Tokens.textDim,
                 modifier = Modifier.padding(top = 4.dp, bottom = 22.dp),
             )
