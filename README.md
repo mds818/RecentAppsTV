@@ -35,17 +35,17 @@ Four presets, shown with the same selected app and background. Click a picture t
     </td>
     <td width="50%">
       <strong>Classic</strong><br>
-      <a href="docs/images/classic.png"><img src="docs/images/classic.png" alt="Classic preset with side layout, app names, details and guidance" width="480"></a><br>
-      A side layout with names, details and remote guidance.
+      <a href="docs/images/classic.png"><img src="docs/images/classic.png" alt="Classic preset with medium rounded cards and bottom labels" width="480"></a><br>
+      Medium rounded cards, side layout and bottom labels.
     </td>
   </tr>
 </table>
 
 ## See it in use
 
-https://github.com/user-attachments/assets/eb2a81f1-0f20-44a3-8ce1-12d05283680a
+https://github.com/user-attachments/assets/777fab27-d29d-40d3-a928-121862a819ef
 
-Browse in all four presets, then close an app from the middle of the row. The closing portion is labelled **0.5× slow motion** so the short animation is easier to see. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-showcase.mp4).
+Browse Default, Clean and Clean+, then see the updated Classic preset and close an app from the middle of the row. The new Classic segment uses **Slow close animation**, shown at real playback speed. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.1/RecentAppsTV-showcase-1.0.1.mp4).
 
 Presets are starting points. Mix and match the settings afterward. Your previous appearance is saved when you first apply a preset and stays available through further preset changes and app restarts. **Restore previous appearance** brings it back. App lists and service/closing preferences are kept when applying presets.
 
@@ -106,6 +106,12 @@ https://github.com/user-attachments/assets/2ce0d35b-b7cd-4480-8857-4062d9a3311c
 The context menu, close hint, preset picker and color chart. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-settings-tour.mp4).
 
 </details>
+
+## Open it from your remote
+
+For quick everyday access, optionally use a button-remapping app such as [Button Mapper](https://buttonmapper.app/) to launch **Recent Apps** or its **Open Recents** shortcut. Assign a single press, double press or long press where your remote and remapping app support it. Follow that app's setup instructions; availability and permissions vary by device. A remapping app is optional and is not bundled with RecentAppsTV.
+
+For an explicit activity mapping, use `com.websnake.recentstv/.RecentsActivity`.
 
 ## Getting started
 
