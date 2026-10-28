@@ -19,6 +19,19 @@ object ShizukuManager {
 
     private const val REQUEST_CODE = 4711
     const val SHIZUKU_PKG = "moe.shizuku.privileged.api"
+    const val PORTER_PKG = "eu.darken.porter"
+
+    private fun managerPackage(context: Context): String {
+        if (eu.darken.porter.sdk.Porter.connection.value?.backend == eu.darken.porter.sdk.PorterBackend.PORTER)
+            return PORTER_PKG
+        if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) return SHIZUKU_PKG
+        // No connected service: offer an installed manager so it can be started.
+        return if (runCatching { context.packageManager.getApplicationInfo(PORTER_PKG, 0).enabled }.getOrDefault(false)) PORTER_PKG
+        else SHIZUKU_PKG
+    }
+
+    fun managerName(context: Context): String =
+        if (managerPackage(context) == PORTER_PKG) "Porter" else "Shizuku"
 
     fun state(): ShizukuState {
         val alive = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
@@ -52,14 +65,16 @@ object ShizukuManager {
 
     /** Open the Shizuku app so the user can start the service / grant. */
     fun openShizuku(context: Context): Boolean {
-        val launch = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PKG)
+        val pkg = managerPackage(context)
+        val launch = context.packageManager.getLeanbackLaunchIntentForPackage(pkg)
+            ?: context.packageManager.getLaunchIntentForPackage(pkg)
         if (launch != null) {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             return runCatching { context.startActivity(launch); true }.getOrDefault(false)
         }
         // fall back to its management activity, then to Play if not installed
         val explicit = Intent().apply {
-            component = ComponentName(SHIZUKU_PKG, "$SHIZUKU_PKG.MainActivity")
+            component = ComponentName(pkg, "$pkg.MainActivity")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return runCatching { context.startActivity(explicit); true }.getOrDefault(false)

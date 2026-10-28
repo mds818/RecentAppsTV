@@ -46,7 +46,7 @@ fun EmptyState() {
                 style = Type.body, color = Tokens.textDim, textAlign = TextAlign.Center,
             )
             Text(
-                "Press OK for settings",
+                "OK  Exit     ↑  Settings     BACK  Exit",
                 style = Type.small, color = Tokens.textFaint, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 10.dp),
             )

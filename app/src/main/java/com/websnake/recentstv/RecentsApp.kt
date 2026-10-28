@@ -8,9 +8,11 @@ import android.os.Build
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class RecentsApp : Application() {
+    private val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
     override fun onCreate() {
         super.onCreate()
+        eu.darken.porter.bridge.PorterShizukuBridge.start(appScope)
         // Lift the hidden-API blocklist so privileged framework reflection
         // (IActivityTaskManager / IActivityManager) is permitted.
         if (Build.VERSION.SDK_INT >= 28) {

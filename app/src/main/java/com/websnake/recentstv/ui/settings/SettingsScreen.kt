@@ -2,18 +2,7 @@ package com.websnake.recentstv.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,67 +15,56 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import com.websnake.recentstv.data.RecentsSettings
-import com.websnake.recentstv.ui.theme.AccentColor
-import com.websnake.recentstv.ui.theme.BgTint
-import com.websnake.recentstv.ui.theme.CardShapeOpt
-import com.websnake.recentstv.ui.theme.LocalAccent
-import com.websnake.recentstv.ui.theme.Tokens
-import com.websnake.recentstv.ui.theme.Type
+import com.websnake.recentstv.ui.theme.*
 
-/** Settings rows, in order. */
-enum class SetRow { KILL_ALL, FORCE_STOP, SIZE, SHAPE, ACCENT, BG_DIM, BG_TINT, EXCEPTIONS }
+enum class SetRow(val section: String? = null) {
+    POSITION("Appearance"), DIRECTION, SIZE, SHAPE, PADDING, ACCENT, BG_DIM, BG_TINT, HEADER, SETTINGS_BUTTON, HELP, APP_NAMES, APP_DETAILS, MOTION,
+    EXCEPTIONS("Apps"),
+    PRIVILEGED("Advanced · Shizuku / Porter"), MANAGER, KILL_ALL, FORCE_STOP,
+    CLOSE_HINT, PROTECTED_APPS, INDIVIDUAL_PROTECTION, CONFIRM_KILL_ALL, RESET("Defaults")
+}
 
-/** Surface 2 — leanback-style settings list. [focus] = row ordinal. */
+enum class SettingsSection(val title: String, val description: String, val rows: List<SetRow>) {
+    APPEARANCE("Appearance", "Cards, colors, layout and app labels", listOf(SetRow.POSITION, SetRow.DIRECTION, SetRow.SIZE, SetRow.SHAPE, SetRow.PADDING, SetRow.ACCENT, SetRow.BG_DIM, SetRow.BG_TINT, SetRow.HEADER, SetRow.APP_NAMES, SetRow.APP_DETAILS)),
+    CONTROLS("Controls", "Settings access, close hint and motion", listOf(SetRow.SETTINGS_BUTTON, SetRow.CLOSE_HINT, SetRow.HELP, SetRow.MOTION)),
+    APPS("Apps", "Kill All, protected apps and app exceptions", listOf(SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION, SetRow.EXCEPTIONS)),
+    ADVANCED("Advanced", "Porter / Shizuku access and force-stop", listOf(SetRow.PRIVILEGED, SetRow.MANAGER, SetRow.FORCE_STOP));
+    companion object { fun forRow(row: SetRow): SettingsSection? = entries.firstOrNull { row in it.rows } }
+}
+
+object SettingsMenu {
+    val presets = SettingsSection.entries.size
+    val about = presets + 1
+    val reset = about + 1
+}
+
 @Composable
-fun SettingsScreen(settings: RecentsSettings, focus: Int, exceptionsSummary: String) {
+fun SettingsHome(focus: Int) {
     val listState = rememberLazyListState()
     LaunchedEffect(focus) { listState.animateScrollToItem(focus) }
-
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
-        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 40.dp)) {
-            Text("Recent Apps", style = Type.hero, color = Tokens.text)
-            Text("Settings", style = Type.body, color = Tokens.textDim, modifier = Modifier.padding(top = 4.dp, bottom = 22.dp))
-
-            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                item {
-                    SettingRow("Show Kill All", "A clear-all tile at the start of the row.", focus == SetRow.KILL_ALL.ordinal) {
-                        Toggle(on = settings.showKillAll)
-                    }
-                }
-                item {
-                    SettingRow("Force stop on kill", "Also force-stop the app so it can't relaunch.", focus == SetRow.FORCE_STOP.ordinal) {
-                        Toggle(on = settings.forceStopOnKill)
-                    }
-                }
-                item {
-                    SettingRow("Size of task", "Scales every card in the overlay.", focus == SetRow.SIZE.ordinal) {
-                        Segmented(listOf("Small", "Medium", "Large"), settings.size.ordinal)
-                    }
-                }
-                item {
-                    SettingRow("Shape of task", "Corner style of every card.", focus == SetRow.SHAPE.ordinal) {
-                        ShapePreview(settings.shape); Spacer(Modifier.width(11.dp))
-                        Segmented(listOf("Square", "Rounded", "Circle"), settings.shape.ordinal)
-                    }
-                }
-                item {
-                    SettingRow("Accent color", "Focus rings and the Kill All tile.", focus == SetRow.ACCENT.ordinal) {
-                        SwatchRow(AccentColor.entries.map { it.color }, settings.accent.ordinal)
-                    }
-                }
-                item {
-                    SettingRow("Background dim", "How much the running app is hidden.", focus == SetRow.BG_DIM.ordinal) {
-                        DimBar(settings.bgDim)
-                    }
-                }
-                item {
-                    SettingRow("Background color", "Tint of the overlay backdrop.", focus == SetRow.BG_TINT.ordinal) {
-                        SwatchRow(BgTint.entries.map { it.color }, settings.bgTint.ordinal, ring = true)
-                    }
-                }
-                item {
-                    SettingRow("Exceptions", exceptionsSummary, focus == SetRow.EXCEPTIONS.ordinal) {
-                        Text("‹", style = Type.title, color = Tokens.textDim)
+        Column(Modifier.fillMaxSize().padding(horizontal = 60.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Recent Apps · Settings", style = Type.title, color = Tokens.text)
+            Text("↑↓ Choose · OK Open · BACK Return", style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.padding(bottom = 12.dp))
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(SettingsMenu.reset + 1) { index ->
+                    if (index < SettingsSection.entries.size) {
+                        val section = SettingsSection.entries[index]
+                        SettingRow(section.title, section.description, focus == index, compact = true) {
+                            Text("›", style = Type.title, color = Tokens.textDim)
+                        }
+                    } else if (index == SettingsMenu.presets || index == SettingsMenu.about) {
+                        val presets = index == SettingsMenu.presets
+                        SettingRow(if (presets) "Appearance presets" else "About",
+                            if (presets) "Default, Clean, Clean+ and Classic · restore previous look" else "Version, project and access modes",
+                            focus == index, compact = true) {
+                            Text("›", style = Type.title, color = Tokens.textDim)
+                        }
+                    } else {
+                        SettingRow("Reset to defaults", "Restore the default profile · confirmation required", focus == index, compact = true) {
+                            Text("Reset…", style = Type.small, color = Tokens.textDim)
+                        }
                     }
                 }
             }
@@ -95,7 +73,131 @@ fun SettingsScreen(settings: RecentsSettings, focus: Int, exceptionsSummary: Str
 }
 
 @Composable
-private fun SettingRow(title: String, desc: String, focused: Boolean, control: @Composable () -> Unit) {
+fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: Int, exceptionsSummary: String, protectedSummary: String, managerName: String, managerStatus: String) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(section, focus) {
+        if (settings.smoothMotion) listState.animateScrollToItem(focus) else listState.scrollToItem(focus)
+    }
+    Box(Modifier.fillMaxSize().background(Tokens.bg)) {
+        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 32.dp)) {
+            Text("Settings · ${section.title}", style = Type.title, color = Tokens.text)
+            Text("↑↓ Choose · ←→ Adjust · OK Toggle / Open", style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp))
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                items(section.rows.size) { index ->
+                    val row = section.rows[index]
+                    Column {
+                        val title = when (row) {
+                            SetRow.POSITION -> "Selection position"
+                            SetRow.DIRECTION -> "Older apps appear"
+                            SetRow.SIZE -> "Card size"
+                            SetRow.SHAPE -> "Card shape"
+                            SetRow.PADDING -> "Card padding"
+                            SetRow.ACCENT -> "Accent color"
+                            SetRow.BG_DIM -> "Background dim"
+                            SetRow.BG_TINT -> "Background color"
+                            SetRow.HEADER -> "Show header"
+                            SetRow.SETTINGS_BUTTON -> "Show settings button"
+                            SetRow.APP_NAMES -> "Show app names"
+                            SetRow.APP_DETAILS -> "App details"
+                            SetRow.CLOSE_HINT -> "Close hint style"
+                            SetRow.HELP -> "Show control hints"
+                            SetRow.MOTION -> "Smooth motion"
+                            SetRow.EXCEPTIONS -> "App exceptions"
+                            SetRow.PROTECTED_APPS -> "Protected apps"
+                            SetRow.INDIVIDUAL_PROTECTION -> "Protect individual closes"
+                            SetRow.CONFIRM_KILL_ALL -> "Confirm Kill All"
+                            SetRow.PRIVILEGED -> "Use Shizuku / Porter"
+                            SetRow.MANAGER -> "Open $managerName"
+                            SetRow.KILL_ALL -> "Kill All location"
+                            SetRow.FORCE_STOP -> "Force-stop on close"
+                            SetRow.RESET -> "Reset to defaults"
+                        }
+                        val desc = when (row) {
+                            SetRow.POSITION -> "Keep the selected card centered, or let the row reach either edge."
+                            SetRow.DIRECTION -> "Choose which way to browse from the most recent app."
+                            SetRow.SIZE -> "The size of application cards."
+                            SetRow.SHAPE -> "Use square, rounded, or circular cards."
+                            SetRow.PADDING -> "Change the gray space around each icon without changing the card size."
+                            SetRow.ACCENT -> "OK opens presets and more colors. Preview before applying."
+                            SetRow.BG_DIM -> "Darken the app behind the overlay."
+                            SetRow.BG_TINT -> "Tint applied with the background dim."
+                            SetRow.HEADER -> "Show the title, app count, and mode. The settings button has its own switch."
+                            SetRow.SETTINGS_BUTTON -> "When hidden, press UP twice to open Settings."
+                            SetRow.APP_NAMES -> "Show the selected app name. Turn off for an icon-only view."
+                            SetRow.APP_DETAILS -> "Privileged only shows details for actual tasks, with Porter or Shizuku."
+                            SetRow.CLOSE_HINT -> "Style of the second-press hint beneath an app."
+                            SetRow.HELP -> "Show remote-control hints along the bottom."
+                            SetRow.MOTION -> "Animate focus and scrolling. Off gives immediate movement."
+                            SetRow.EXCEPTIONS -> exceptionsSummary
+                            SetRow.PROTECTED_APPS -> protectedSummary
+                            SetRow.INDIVIDUAL_PROTECTION -> "Also protect chosen apps from DOWN and the context-menu close action."
+                            SetRow.CONFIRM_KILL_ALL -> "Review before closing all apps. Off closes immediately; protected apps are still skipped."
+                            SetRow.PRIVILEGED -> "When enabled, use actual tasks if authorized; otherwise use history."
+                            SetRow.MANAGER -> "$managerStatus. OK opens the manager or requests access."
+                            SetRow.KILL_ALL -> "Privileged mode only. Hidden automatically in usage-history mode."
+                            SetRow.FORCE_STOP -> "Privileged mode only. Also stop the app when closing its task."
+                            SetRow.RESET -> "Restore the preferred profile and clear app exceptions. Confirmation required."
+                        }
+                        SettingRow(title, desc, focus == index) {
+                            when (row) {
+                                SetRow.POSITION -> Segmented(listOf("Centered", "Side"), settings.position.ordinal)
+                                SetRow.DIRECTION -> Segmented(listOf("← Left", "Right →"), settings.direction.ordinal)
+                                SetRow.SIZE -> Segmented(listOf("Small", "Medium", "Large"), settings.size.ordinal)
+                                SetRow.SHAPE -> { ShapePreview(settings.shape); Spacer(Modifier.width(11.dp)); Segmented(listOf("Square", "Rounded", "Circle"), settings.shape.ordinal) }
+                                SetRow.PADDING -> Segmented(listOf("None", "Compact", "Normal", "Wide"), settings.cardPadding.ordinal)
+                                SetRow.ACCENT -> {
+                                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(settings.accentColor))
+                                    Spacer(Modifier.width(16.dp))
+                                    Text("›", style = Type.title, color = Tokens.textDim)
+                                }
+                                SetRow.BG_DIM -> DimBar(settings.bgDim)
+                                SetRow.BG_TINT -> SwatchRow(BgTint.entries.map { it.color }, settings.bgTint.ordinal, ring = true)
+                                SetRow.HEADER -> Toggle(settings.showHeader)
+                                SetRow.SETTINGS_BUTTON -> Toggle(settings.showSettingsButton)
+                                SetRow.APP_NAMES -> Toggle(settings.showAppNames)
+                                SetRow.APP_DETAILS -> Segmented(listOf("Off", "Always", "Privileged only"), settings.appDetailsMode.ordinal)
+                                SetRow.CLOSE_HINT -> Segmented(listOf("Elevated", "Minimal"), settings.closeHintStyle.ordinal)
+                                SetRow.HELP -> Toggle(settings.showHelp)
+                                SetRow.MOTION -> Toggle(settings.smoothMotion)
+                                SetRow.PRIVILEGED -> Toggle(settings.usePrivileged)
+                                SetRow.KILL_ALL -> Segmented(listOf("App row", "Top controls", "Hidden"), settings.killAllLocation.ordinal)
+                                SetRow.FORCE_STOP -> Toggle(settings.forceStopOnKill)
+                                SetRow.RESET -> Text("Reset…", style = Type.small, color = Tokens.textDim)
+                                SetRow.EXCEPTIONS -> Text("›", style = Type.title, color = Tokens.textDim)
+                                SetRow.PROTECTED_APPS -> Text("›", style = Type.title, color = Tokens.textDim)
+                                SetRow.INDIVIDUAL_PROTECTION -> Toggle(settings.protectIndividualCloses)
+                                SetRow.CONFIRM_KILL_ALL -> Toggle(settings.confirmKillAll)
+                                SetRow.MANAGER -> Text("↗", style = Type.row, color = Tokens.textDim)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ResetDefaultsDialog(confirmSelected: Boolean) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)), contentAlignment = Alignment.Center) {
+        Column(Modifier.width(540.dp).clip(RoundedCornerShape(20.dp)).background(Tokens.surface)
+            .border(1.dp, Tokens.line, RoundedCornerShape(20.dp)).padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("Reset to your default profile?", style = Type.title, color = Tokens.text)
+            Text("Centered · older apps left · Large · Circle · Green · 80% dim · Black background",
+                style = Type.body, color = Tokens.textDim)
+            Text("Also clears hidden and protected app lists and the saved appearance. Android permissions stay unchanged.",
+                style = Type.small, color = Tokens.textDim)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Segmented(listOf("Cancel", "Reset"), if (confirmSelected) 1 else 0)
+            }
+            Text("←→ Choose · OK Confirm · BACK Cancel", style = Type.small, color = Tokens.textDim)
+        }
+    }
+}
+@Composable
+private fun SettingRow(title: String, desc: String, focused: Boolean, compact: Boolean = false, control: @Composable () -> Unit) {
     val accent = LocalAccent.current
     Row(
         Modifier
@@ -103,7 +205,7 @@ private fun SettingRow(title: String, desc: String, focused: Boolean, control: @
             .clip(RoundedCornerShape(11.dp))
             .background(if (focused) Tokens.surface2 else Tokens.surface)
             .border(1.dp, if (focused) accent.base else Color.Transparent, RoundedCornerShape(11.dp))
-            .padding(horizontal = 22.dp, vertical = 16.dp),
+            .padding(horizontal = 22.dp, vertical = if (compact) 10.dp else 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -201,3 +303,7 @@ private fun ShapePreview(shape: CardShapeOpt) {
             .border(1.dp, Tokens.line, shape.shape(38.dp))
     )
 }
+
+
+
+

@@ -4,25 +4,32 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
+// Only the optional local migration artifact targets Android 9+. The normal
+// public APK continues to support Android 7+. Both preserve the launcher identity.
+def migrationBuild = providers.gradleProperty('migrationBuild').orNull == 'true'
+
 android {
     namespace 'com.websnake.recentstv'
     compileSdk 35
+    buildToolsVersion '35.0.0'
 
     defaultConfig {
         applicationId "com.websnake.recentstv"
-        minSdk 24
+        minSdk (migrationBuild ? 28 : 24)
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 16
+        versionName (migrationBuild ? "1.14.0-migration" : "1.14.0")
+        testInstrumentationRunner 'com.websnake.recentstv.InputSmokeTest'
     }
 
     buildTypes {
         release {
             // No minification: privileged framework reflection (IActivityTaskManager,
-            // Shizuku) must not be stripped/renamed. Non-debuggable release dex is
-            // what makes Compose smooth on the TV GPU.
+            // Shizuku) must not be stripped/renamed. Measure representative performance
+            // with a non-debuggable release build rather than assuming a speedup.
+            debuggable false
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            // Sign the unsigned result outside Gradle. Never commit private keys.
         }
     }
 
@@ -56,7 +63,7 @@ dependencies {
     implementation 'androidx.tv:tv-material:1.0.0'
 
     // Coroutines
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
 
     // DataStore for settings persistence
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
@@ -64,9 +71,15 @@ dependencies {
     // Shizuku (same versions as the working force-stop app)
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
+    implementation 'com.github.d4rken-org.porter-api:shizuku-bridge:0.9.0'
 
     // Hidden API blocklist bypass for privileged framework reflection
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }
+
+
+
+
+

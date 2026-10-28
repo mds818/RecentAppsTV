@@ -4,6 +4,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -96,7 +97,7 @@ fun accentPaletteFor(base: Color) = AccentPalette(
     base = base,
     tint = base.copy(alpha = 0.16f),
     glow = base.copy(alpha = 0.55f),
-    onDark = Color(0xFF07140A),     // dark text/glyph on a solid-accent fill
+    onDark = if (base.luminance() < 0.3f) Color.White else Color(0xFF07140A),
 )
 
 val LocalAccent = androidx.compose.runtime.staticCompositionLocalOf { accentPaletteFor(Tokens.accent) }

@@ -34,6 +34,7 @@ class RecentTasksRepository(private val context: Context) {
         ownPackage,
         "com.android.systemui",
         ShizukuManager.SHIZUKU_PKG,
+        ShizukuManager.PORTER_PKG,
     )
     private val launcherHints = listOf(
         "com.google.android.tvlauncher",
@@ -56,8 +57,43 @@ class RecentTasksRepository(private val context: Context) {
         pkg in homePackages || launcherHints.any { pkg.startsWith(it) }
 
     /** True when Shizuku is alive AND granted. */
-    fun ready(): Boolean = ShizukuManager.state().ready
+    @Volatile var privilegedEnabled: Boolean = true
+    fun ready(): Boolean = privilegedEnabled && ShizukuManager.state().ready
 
+    /** Usage history entries are not running tasks. Negative IDs are UI keys only. */
+    fun hasUsageAccess(): Boolean = runCatching {
+        context.getSystemService(android.app.AppOpsManager::class.java)
+            .checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), ownPackage) == android.app.AppOpsManager.MODE_ALLOWED
+    }.getOrDefault(false)
+
+    fun getRecentApps(exceptions: Set<String>): List<RecentTask> {
+        if (!hasUsageAccess()) return emptyList()
+        val end = System.currentTimeMillis()
+        val begin = end - java.util.concurrent.TimeUnit.DAYS.toMillis(7)
+        val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
+        val lastForeground = HashMap<String, Long>()
+        val events = usage.queryEvents(begin, end) ?: return emptyList()
+        val event = android.app.usage.UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                val pkg = event.packageName ?: continue
+                lastForeground[pkg] = maxOf(lastForeground[pkg] ?: 0L, event.timeStamp)
+            }
+        }
+        return lastForeground.entries.asSequence()
+            .filter { (pkg, _) ->
+                pkg !in skipPackages && pkg !in exceptions && !isHome(pkg) && pkgRepo.isUsable(pkg) &&
+                    (context.packageManager.getLeanbackLaunchIntentForPackage(pkg)
+                        ?: context.packageManager.getLaunchIntentForPackage(pkg)) != null
+            }
+            .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
+            .take(MAX_TASKS)
+            .mapIndexed { i, entry -> RecentTask(-i - 1, entry.key, pkgRepo.label(entry.key),
+                pkgRepo.icon(entry.key), "Recently used (not a running task)", true) }
+            .toList()
+    }
     // ── reading ──────────────────────────────────────────────────────────
     fun getRecentTasks(exceptions: Set<String>): List<RecentTask> {
         if (!ready()) return emptyList()
@@ -117,14 +153,7 @@ class RecentTasksRepository(private val context: Context) {
      * list` output; fall back to the heavier `dumpsys activity recents` (full MRU)
      * only if that yields nothing.
      */
-    private fun readViaShell(): List<Pair<Int, String>> {
-        val fast = ArrayList<Pair<Int, String>>()
-        Regex("taskId=(\\d+): ([\\w.]+)/").findAll(execShell("am stack list")).forEach {
-            fast.add(it.groupValues[1].toInt() to it.groupValues[2])
-        }
-        if (fast.size >= 2) return fast
-        return readViaDumpsys()
-    }
+    private fun readViaShell(): List<Pair<Int, String>> = readViaDumpsys()
 
     private fun readViaDumpsys(): List<Pair<Int, String>> {
         val out = ArrayList<Pair<Int, String>>()
@@ -138,9 +167,9 @@ class RecentTasksRepository(private val context: Context) {
         for (b in blocks.drop(1)) {
             val taskId = idRe.find(b)?.groupValues?.get(1)?.toIntOrNull()
                 ?: Regex("#(\\d+)").find(b)?.groupValues?.get(1)?.toIntOrNull() ?: -1
-            val pkg = affRe.find(b)?.groupValues?.get(1)
-                ?: realRe.find(b)?.groupValues?.get(1)
+            val pkg = realRe.find(b)?.groupValues?.get(1)
                 ?: cmpRe.find(b)?.groupValues?.get(1)
+                ?: affRe.find(b)?.groupValues?.get(1)
             if (pkg != null) out.add(taskId to pkg)
         }
         if (out.isEmpty()) {
@@ -156,7 +185,7 @@ class RecentTasksRepository(private val context: Context) {
     // ── actions ──────────────────────────────────────────────────────────
     /** Bring an existing task to the front. Returns false → caller should launch via intent. */
     fun switchTo(task: RecentTask): Boolean {
-        if (!ready()) return false
+        if (task.isUsageEntry || !ready()) return false
         // reflection moveTaskToFront(IApplicationThread, String, int taskId, int flags, Bundle)
         // — a null caller/options works for a privileged binder. Signatures vary across
         // ROMs, so resolve dynamically: taskId goes in the first int slot, 0 in any other.
@@ -183,8 +212,8 @@ class RecentTasksRepository(private val context: Context) {
     /** Remove a recent entry. Apps can own SEVERAL tasks, so remove every task
      *  for the package (else the app re-appears from a sibling task). Optionally
      *  force-stop the app so it can't immediately recreate its task. */
-    fun dismiss(task: RecentTask, forceStop: Boolean): Boolean {
-        if (!ready()) return false
+    fun dismiss(task: RecentTask, forceStop: Boolean, protectedApps: Set<String> = emptySet()): Boolean {
+        if (task.isUsageEntry || task.packageName in protectedApps || !ready()) return false
         // Force-stop FIRST so the app can't recreate its tasks while we remove them.
         if (forceStop) forceStop(task.packageName)
         val ids = allTaskIdsForPackage(task.packageName).ifEmpty { listOf(task.taskId) }
@@ -193,9 +222,9 @@ class RecentTasksRepository(private val context: Context) {
         return ok
     }
 
-    fun killAll(tasks: List<RecentTask>, forceStop: Boolean) {
+    fun killAll(tasks: List<RecentTask>, forceStop: Boolean, protectedApps: Set<String> = emptySet()) {
         if (!ready()) return
-        val pkgs = tasks.mapTo(HashSet()) { it.packageName }
+        val pkgs = tasks.filterNot { it.isUsageEntry || it.packageName in protectedApps }.mapTo(HashSet()) { it.packageName }
         if (forceStop) for (p in pkgs) forceStop(p)
         val all = runCatching { readViaShell() }.getOrDefault(emptyList())
         for ((id, pkg) in all) if (pkg in pkgs) removeTaskViaBinder(id)
@@ -280,6 +309,11 @@ class RecentTasksRepository(private val context: Context) {
         val process = newProcess.invoke(
             null, arrayOf("sh", "-c", "$command 2>/dev/null"), null, null
         ) as Process
+        // Bound a dead binder / shell command so reloads cannot strand an IO worker forever.
+        val watchdog = java.util.Timer(true)
+        watchdog.schedule(object : java.util.TimerTask() {
+            override fun run() { runCatching { process.destroy() } }
+        }, 5000L)
         val reader = BufferedReader(InputStreamReader(process.inputStream))
         try {
             val sb = StringBuilder()
@@ -288,7 +322,9 @@ class RecentTasksRepository(private val context: Context) {
             process.waitFor()
             sb.toString()
         } finally {
+            watchdog.cancel()
             reader.close()
+            process.destroy()
         }
     }.getOrElse { Log.w("RecentsRepo", "shell failed: ${it.message}"); "" }
 }

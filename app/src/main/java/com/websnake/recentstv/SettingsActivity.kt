@@ -15,9 +15,19 @@ import com.websnake.recentstv.data.InstalledApp
 import com.websnake.recentstv.data.PackageRepository
 import com.websnake.recentstv.data.RecentsSettings
 import com.websnake.recentstv.data.SettingsStore
+import com.websnake.recentstv.data.AppearancePreset
+import com.websnake.recentstv.ui.settings.SettingsMenu
+import com.websnake.recentstv.ui.settings.AppearancePresetsScreen
+import com.websnake.recentstv.ui.settings.ApplyPresetDialog
+import com.websnake.recentstv.ui.settings.AboutScreen
 import com.websnake.recentstv.ui.settings.ExceptionsScreen
 import com.websnake.recentstv.ui.settings.SetRow
 import com.websnake.recentstv.ui.settings.SettingsScreen
+import com.websnake.recentstv.ui.settings.SettingsHome
+import com.websnake.recentstv.ui.settings.SettingsSection
+import com.websnake.recentstv.ui.settings.AccentChart
+import com.websnake.recentstv.ui.settings.AccentColorChart
+import androidx.compose.ui.graphics.toArgb
 import com.websnake.recentstv.ui.theme.AccentColor
 import com.websnake.recentstv.ui.theme.BgTint
 import com.websnake.recentstv.ui.theme.CardShapeOpt
@@ -27,7 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class SetScreen { SETTINGS, EXCEPTIONS }
+private enum class SetScreen { SETTINGS, EXCEPTIONS, PROTECTED, PRESETS, ABOUT }
 
 class SettingsActivity : ComponentActivity() {
 
@@ -37,32 +47,77 @@ class SettingsActivity : ComponentActivity() {
     private var screen by mutableStateOf(SetScreen.SETTINGS)
     private var settings by mutableStateOf(RecentsSettings())
     private var setFocus by mutableIntStateOf(0)
+    private var section by mutableStateOf<SettingsSection?>(null)
+    private var rootFocus by mutableIntStateOf(0)
+    private var presetFocus by mutableIntStateOf(0)
+    private var presetPrompt by mutableStateOf(false)
+    private var confirmPreset by mutableStateOf(false)
+    private var canRestoreAppearance by mutableStateOf(false)
     private val apps = mutableStateListOf<InstalledApp>()
     private var excFocus by mutableIntStateOf(0)
+    private var resetPrompt by mutableStateOf(false)
+    private var confirmReset by mutableStateOf(false)
+    private var colorPrompt by mutableStateOf(false)
+    private var chartFocus by mutableIntStateOf(0)
+    private var appsLoading by mutableStateOf(false)
+    private var appsLoadError by mutableStateOf(false)
+    private var appsLoadJob: kotlinx.coroutines.Job? = null
+    private var appsLoadGeneration = 0
+    private var managerStatus by mutableStateOf("Checking access")
+    private var managerLabel by mutableStateOf("Porter / Shizuku")
+    private var statusJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = SettingsStore(applicationContext)
         pkgRepo = PackageRepository(applicationContext)
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val buildNumber = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(packageInfo)
+        val buildType = if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) "Debug" else "Release"
+        val version = "Version ${packageInfo.versionName} · Build $buildNumber · $buildType"
+        lifecycleScope.launch {
+            store.canRestoreAppearance.collect { canRestoreAppearance = it }
+        }
 
         lifecycleScope.launch {
-            store.settings.collect { settings = it }
+            store.settings.collect { updated ->
+                val focusedPackage = apps.getOrNull(excFocus)?.packageName
+                settings = updated
+                if (apps.isNotEmpty()) {
+                    val sorted = sortExceptions(apps, if (screen == SetScreen.PROTECTED) updated.protectedApps else updated.exceptions)
+                    apps.clear(); apps.addAll(sorted)
+                    excFocus = sorted.indexOfFirst { it.packageName == focusedPackage }.coerceAtLeast(0)
+                }
+            }
         }
 
         setContent {
-            RecentsTheme(accent = settings.accent.color) {
+            RecentsTheme(accent = if (colorPrompt) AccentChart.colors[chartFocus] else settings.accentColor) {
                 when (screen) {
-                    SetScreen.SETTINGS -> SettingsScreen(
+                    SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance)
+                    SetScreen.ABOUT -> AboutScreen(version)
+                    SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus) else SettingsScreen(
                         settings = settings,
+                        section = section!!,
                         focus = setFocus,
                         exceptionsSummary = excSummary(),
+                        protectedSummary = protectedSummary(),
+                        managerName = managerLabel,
+                        managerStatus = managerStatus,
                     )
-                    SetScreen.EXCEPTIONS -> ExceptionsScreen(
+                    SetScreen.EXCEPTIONS, SetScreen.PROTECTED -> ExceptionsScreen(
                         apps = apps,
-                        excluded = settings.exceptions,
+                        excluded = if (screen == SetScreen.PROTECTED) settings.protectedApps else settings.exceptions,
+                        protection = screen == SetScreen.PROTECTED,
+                        protectIndividual = settings.protectIndividualCloses,
+                        loading = appsLoading,
+                        loadError = appsLoadError,
                         focus = excFocus,
                     )
                 }
+                if (resetPrompt) com.websnake.recentstv.ui.settings.ResetDefaultsDialog(confirmReset)
+                if (colorPrompt) AccentColorChart(chartFocus)
+                if (presetPrompt) ApplyPresetDialog(AppearancePreset.entries.getOrNull(presetFocus), confirmPreset)
             }
         }
     }
@@ -71,101 +126,248 @@ class SettingsActivity : ComponentActivity() {
         val n = settings.exceptions.size
         return if (n == 0) "No apps hidden" else "$n ${if (n == 1) "app" else "apps"} hidden"
     }
+    private fun protectedSummary(): String {
+        val n = settings.protectedApps.size
+        return "$n ${if (n == 1) "app" else "apps"} protected"
+    }
 
     // ── key handling ────────────────────────────────────────────────────────
+    // This overrides the public android.app.Activity callback. AndroidX core's inherited
+    // library restriction triggers lint here even though no restricted superclass API is called.
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return true
+        val isOk = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+            event.keyCode == KeyEvent.KEYCODE_ENTER || event.keyCode == KeyEvent.KEYCODE_BUTTON_A
+        // Holding OK must not repeat toggles or confirm an action opened by that same press.
+        if (isOk && event.repeatCount > 0) return true
+        if (presetPrompt) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> presetPrompt = false
+                KeyEvent.KEYCODE_DPAD_LEFT -> confirmPreset = false
+                KeyEvent.KEYCODE_DPAD_RIGHT -> confirmPreset = true
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    presetPrompt = false
+                    if (confirmPreset) {
+                        val preset = AppearancePreset.entries.getOrNull(presetFocus)
+                        persist {
+                            val message = if (preset == null) {
+                                if (store.restoreAppearance()) "Previous appearance restored" else "No saved appearance to restore"
+                            } else {
+                                store.applyAppearancePreset(preset)
+                                "${preset.title} appearance applied"
+                            }
+                            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            return true
+        }
+        if (colorPrompt) {
+            val col = chartFocus % AccentChart.columns
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> colorPrompt = false
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (col > 0) chartFocus--
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (col < AccentChart.columns - 1) chartFocus++
+                KeyEvent.KEYCODE_DPAD_UP -> chartFocus = (chartFocus - AccentChart.columns).coerceAtLeast(col)
+                KeyEvent.KEYCODE_DPAD_DOWN -> chartFocus = (chartFocus + AccentChart.columns).coerceAtMost(AccentChart.colors.lastIndex - (AccentChart.columns - 1 - col))
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    val preset = AccentColor.entries.getOrNull(chartFocus)
+                    val argb = AccentChart.colors[chartFocus].toArgb()
+                    colorPrompt = false
+                    persist { if (preset != null) store.setAccent(preset) else store.setCustomAccent(argb) }
+                }
+            }
+            return true
+        }
+        if (resetPrompt) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> resetPrompt = false
+                KeyEvent.KEYCODE_DPAD_LEFT -> confirmReset = false
+                KeyEvent.KEYCODE_DPAD_RIGHT -> confirmReset = true
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    resetPrompt = false
+                    if (confirmReset) persist {
+                        store.resetToDefaults()
+                        setFocus = 0
+                        rootFocus = 0; section = null
+                        android.widget.Toast.makeText(this, "Settings reset to defaults", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            return true
+        }
         if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
-            if (screen == SetScreen.EXCEPTIONS) { screen = SetScreen.SETTINGS } else finish()
+            if (screen != SetScreen.SETTINGS) {
+                appsLoadGeneration++; appsLoadJob?.cancel(); appsLoading = false
+                screen = SetScreen.SETTINGS
+            }
+            else if (section != null) { section = null; setFocus = 0 }
+            else finish()
             return true
         }
         when (screen) {
             SetScreen.SETTINGS -> settingsKey(event.keyCode)
-            SetScreen.EXCEPTIONS -> excKey(event.keyCode)
+            SetScreen.EXCEPTIONS, SetScreen.PROTECTED -> excKey(event.keyCode)
+            SetScreen.PRESETS -> when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> presetFocus = (presetFocus - 1).coerceAtLeast(0)
+                KeyEvent.KEYCODE_DPAD_DOWN -> presetFocus = (presetFocus + 1).coerceAtMost(AppearancePreset.entries.size)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    if (presetFocus < AppearancePreset.entries.size || canRestoreAppearance) {
+                        confirmPreset = false; presetPrompt = true
+                    }
+                }
+            }
+            SetScreen.ABOUT -> {} // Read-only. BACK returns to the same root row.
         }
         return true
     }
 
     private fun settingsKey(code: Int) {
-        val last = SetRow.entries.size - 1
+        val activeSection = section
+        if (activeSection == null) {
+            when (code) {
+                KeyEvent.KEYCODE_DPAD_UP -> rootFocus = (rootFocus - 1).coerceAtLeast(0)
+                KeyEvent.KEYCODE_DPAD_DOWN -> rootFocus = (rootFocus + 1).coerceAtMost(SettingsMenu.reset)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    when (rootFocus) {
+                        SettingsMenu.reset -> { confirmReset = false; resetPrompt = true }
+                        SettingsMenu.presets -> { presetFocus = 0; screen = SetScreen.PRESETS }
+                        SettingsMenu.about -> screen = SetScreen.ABOUT
+                        else -> { section = SettingsSection.entries[rootFocus]; setFocus = 0 }
+                    }
+                }
+            }
+            return
+        }
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> setFocus = (setFocus - 1).coerceAtLeast(0)
-            KeyEvent.KEYCODE_DPAD_DOWN -> setFocus = (setFocus + 1).coerceAtMost(last)
+            KeyEvent.KEYCODE_DPAD_DOWN -> setFocus = (setFocus + 1).coerceAtMost(activeSection.rows.lastIndex)
             KeyEvent.KEYCODE_DPAD_LEFT -> adjust(-1)
             KeyEvent.KEYCODE_DPAD_RIGHT -> adjust(+1)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
-                when (SetRow.entries[setFocus]) {
-                    SetRow.KILL_ALL -> persist { store.setShowKillAll(!settings.showKillAll) }
-                    SetRow.FORCE_STOP -> persist { store.setForceStop(!settings.forceStopOnKill) }
-                    SetRow.SIZE -> stepSize(+1)
-                    SetRow.SHAPE -> stepShape(+1)
-                    SetRow.ACCENT -> stepAccent(+1)
-                    SetRow.BG_DIM -> stepBgDim(+1)
-                    SetRow.BG_TINT -> stepBgTint(+1)
+                when (activeSection.rows[setFocus]) {
+                    SetRow.ACCENT -> { chartFocus = AccentChart.nearest(settings.accentColor); colorPrompt = true }
+                    SetRow.INDIVIDUAL_PROTECTION -> persist { store.toggleIndividualProtection() }
+                    SetRow.CONFIRM_KILL_ALL -> persist { store.toggleKillAllConfirmation() }
+                    SetRow.FORCE_STOP -> persist { store.toggleForceStop() }
+                    SetRow.HEADER -> persist { store.toggleShowHeader() }
+                    SetRow.SETTINGS_BUTTON -> persist { store.toggleSettingsButton() }
+                    SetRow.APP_NAMES -> persist { store.toggleAppNames() }
+                    SetRow.HELP -> persist { store.toggleShowHelp() }
+                    SetRow.MOTION -> persist { store.toggleSmoothMotion() }
+                    SetRow.PRIVILEGED -> persist { store.toggleUsePrivileged() }
+                    SetRow.RESET -> { confirmReset = false; resetPrompt = true }
                     SetRow.EXCEPTIONS -> openExceptions()
+                    SetRow.PROTECTED_APPS -> openExceptions(protection = true)
+                    SetRow.MANAGER -> {
+                        val manager = com.websnake.recentstv.shizuku.ShizukuManager
+                        val state = manager.state()
+                        if (settings.usePrivileged && state.binderAlive && !state.permissionGranted) manager.requestPermission()
+                        else if (!manager.openShizuku(this))
+                            android.widget.Toast.makeText(this, "Porter or Shizuku is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {} // Left/Right adjusts values. OK never advances to the next value.
                 }
         }
     }
 
     private fun adjust(dir: Int) {
-        when (SetRow.entries[setFocus]) {
-            SetRow.KILL_ALL -> persist { store.setShowKillAll(!settings.showKillAll) }
-            SetRow.FORCE_STOP -> persist { store.setForceStop(!settings.forceStopOnKill) }
-            SetRow.SIZE -> stepSize(dir)
-            SetRow.SHAPE -> stepShape(dir)
-            SetRow.ACCENT -> stepAccent(dir)
-            SetRow.BG_DIM -> stepBgDim(dir)
-            SetRow.BG_TINT -> stepBgTint(dir)
-            SetRow.EXCEPTIONS -> {}
+        when (section?.rows?.getOrNull(setFocus)) {
+            SetRow.POSITION -> persist { store.adjustPosition(dir) }
+            SetRow.DIRECTION -> persist { store.adjustDirection(dir) }
+            SetRow.SIZE -> persist { store.adjustSize(dir) }
+            SetRow.SHAPE -> persist { store.adjustShape(dir) }
+            SetRow.PADDING -> persist { store.adjustCardPadding(dir) }
+            SetRow.ACCENT -> persist { store.adjustAccent(dir) }
+            SetRow.BG_DIM -> persist { store.adjustBgDim(dir) }
+            SetRow.BG_TINT -> persist { store.adjustBgTint(dir) }
+            SetRow.KILL_ALL -> persist { store.adjustKillAllLocation(dir) }
+            SetRow.INDIVIDUAL_PROTECTION -> persist { store.setIndividualProtection(dir > 0) }
+            SetRow.CONFIRM_KILL_ALL -> persist { store.setKillAllConfirmation(dir > 0) }
+            SetRow.FORCE_STOP -> persist { store.setForceStop(dir > 0) }
+            SetRow.HEADER -> persist { store.setShowHeader(dir > 0) }
+            SetRow.SETTINGS_BUTTON -> persist { store.setShowSettingsButton(dir > 0) }
+            SetRow.APP_NAMES -> persist { store.setAppNames(dir > 0) }
+            SetRow.APP_DETAILS -> persist { store.adjustAppDetailsMode(dir) }
+            SetRow.CLOSE_HINT -> persist { store.adjustCloseHintStyle(dir) }
+            SetRow.HELP -> persist { store.setShowHelp(dir > 0) }
+            SetRow.MOTION -> persist { store.setSmoothMotion(dir > 0) }
+            SetRow.PRIVILEGED -> persist { store.setUsePrivileged(dir > 0) }
+            else -> {}
+        }
+    }
+    override fun onResume() {
+        super.onResume()
+        statusJob?.cancel()
+        statusJob = lifecycleScope.launch {
+            while (true) {
+                val state = com.websnake.recentstv.shizuku.ShizukuManager.state()
+                managerLabel = com.websnake.recentstv.shizuku.ShizukuManager.managerName(this@SettingsActivity)
+                managerStatus = when {
+                    !settings.usePrivileged -> "Disabled for this app · usage history"
+                    state.ready -> "Connected and authorized · actual tasks"
+                    state.binderAlive -> "Running · access not granted"
+                    else -> "Service unavailable · usage history"
+                }
+                kotlinx.coroutines.delay(1000)
+            }
         }
     }
 
-    private fun stepSize(dir: Int) {
-        val v = CardSizeOpt.entries
-        persist { store.setSize(v[(settings.size.ordinal + dir).coerceIn(0, v.size - 1)]) }
+    override fun onPause() {
+        statusJob?.cancel()
+        super.onPause()
     }
-
-    private fun stepShape(dir: Int) {
-        val v = CardShapeOpt.entries
-        persist { store.setShape(v[(settings.shape.ordinal + dir).coerceIn(0, v.size - 1)]) }
-    }
-
-    private fun stepAccent(dir: Int) {
-        val v = AccentColor.entries
-        persist { store.setAccent(v[(settings.accent.ordinal + dir).coerceIn(0, v.size - 1)]) }
-    }
-
-    private fun stepBgDim(dir: Int) {
-        persist { store.setBgDim((settings.bgDim + dir * 5).coerceIn(0, 100)) }
-    }
-
-    private fun stepBgTint(dir: Int) {
-        val v = BgTint.entries
-        persist { store.setBgTint(v[(settings.bgTint.ordinal + dir).coerceIn(0, v.size - 1)]) }
-    }
-
-    private fun openExceptions() {
+    private fun openExceptions(protection: Boolean = false) {
+        appsLoadJob?.cancel()
+        val generation = ++appsLoadGeneration
         excFocus = 0
-        screen = SetScreen.EXCEPTIONS
-        if (apps.isEmpty()) {
-            lifecycleScope.launch {
+        screen = if (protection) SetScreen.PROTECTED else SetScreen.EXCEPTIONS
+        appsLoading = true; appsLoadError = false
+        apps.clear()
+        appsLoadJob = lifecycleScope.launch {
+            try {
                 val loaded = withContext(Dispatchers.IO) { pkgRepo.installedApps() }
-                apps.clear(); apps.addAll(loaded)
+                if (generation == appsLoadGeneration) {
+                    apps.clear(); apps.addAll(sortExceptions(loaded, if (protection) settings.protectedApps else settings.exceptions))
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("Settings", "App list could not be loaded", error)
+                if (generation == appsLoadGeneration) appsLoadError = true
+            } finally {
+                if (generation == appsLoadGeneration) appsLoading = false
             }
         }
     }
 
     private fun excKey(code: Int) {
+        if (appsLoading) return
+        if (appsLoadError) {
+            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_BUTTON_A)
+                openExceptions(screen == SetScreen.PROTECTED)
+            return
+        }
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> excFocus = (excFocus - 1).coerceAtLeast(0)
             KeyEvent.KEYCODE_DPAD_DOWN -> excFocus = (excFocus + 1).coerceAtMost((apps.size - 1).coerceAtLeast(0))
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
-                apps.getOrNull(excFocus)?.let { app -> persist { store.toggleException(app.packageName) } }
+                apps.getOrNull(excFocus)?.let { app -> persist { if (screen == SetScreen.PROTECTED) store.toggleProtectedApp(app.packageName) else store.toggleException(app.packageName) } }
             }
         }
     }
+
+    private fun sortExceptions(list: List<InstalledApp>, hidden: Set<String>) =
+        list.sortedWith(compareByDescending<InstalledApp> { it.packageName in hidden }
+            .thenBy { it.label.lowercase() }.thenBy { it.packageName })
 
     private fun persist(block: suspend () -> Unit) {
         lifecycleScope.launch { block() }
     }
 }
+
+
+

@@ -19,13 +19,14 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.lifecycleScope
 import com.websnake.recentstv.data.RecentTask
 import com.websnake.recentstv.data.RecentTasksRepository
+import com.websnake.recentstv.data.KillAllLocation
 import com.websnake.recentstv.data.RecentsSettings
 import com.websnake.recentstv.data.SettingsStore
 import com.websnake.recentstv.shizuku.ShizukuManager
 import com.websnake.recentstv.ui.overlay.OverlayItem
 import com.websnake.recentstv.ui.overlay.RecentsOverlay
 import com.websnake.recentstv.ui.state.EmptyState
-import com.websnake.recentstv.ui.state.ShizukuGate
+import com.websnake.recentstv.ui.state.UsageAccessState
 import com.websnake.recentstv.ui.theme.RecentsTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -34,7 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
-private enum class Scene { LOADING, OVERLAY, EMPTY, SHIZUKU }
+private enum class Scene { LOADING, OVERLAY, EMPTY, USAGE }
 
 class RecentsActivity : ComponentActivity() {
 
@@ -42,8 +43,7 @@ class RecentsActivity : ComponentActivity() {
     private lateinit var store: SettingsStore
 
     // ── UI state (observed by the composition, mutated by the key handler) ──
-    // Start transparent (LOADING) so the Shizuku gate never flashes before the
-    // async readiness check resolves; reload() picks the real scene immediately.
+    // Resolve task/usage mode before presenting interactive cards.
     private var scene by mutableStateOf(Scene.LOADING)
     private val tasks = mutableStateListOf<RecentTask>()
     private var settings by mutableStateOf(RecentsSettings())
@@ -51,23 +51,32 @@ class RecentsActivity : ComponentActivity() {
     private var peekDir by mutableIntStateOf(-1)             // -1 none, 0 up, 1 down
     private var dismissing by mutableStateOf<Pair<Int, Int>?>(null)
     private var killing by mutableStateOf(false)
+    private var killPrompt by mutableStateOf(false)
+    private var confirmKill by mutableStateOf(false)
     private var gearFocused by mutableStateOf(false)        // settings gear (top-right)
-    private var shzFocus by mutableIntStateOf(0)
+    private var topKillFocused by mutableStateOf(false)
+    private var settingsHintVisible by mutableStateOf(false)
+    private var settingsHintJob: kotlinx.coroutines.Job? = null
+    private var privileged by mutableStateOf(false)
     private var ctxTask by mutableStateOf<RecentTask?>(null) // long-press context menu target
     private var ctxSelected by mutableIntStateOf(0)
     private var longPressFired = false
+    private var centerHeld = false
+    private var ignoreCenterUntilUp = false
+    private var longPressJob: kotlinx.coroutines.Job? = null
     private var busy = false                                  // guards async transitions
 
     private var reloadJob: kotlinx.coroutines.Job? = null
+    private var actionJob: kotlinx.coroutines.Job? = null
 
-    private val permListener = Shizuku.OnRequestPermissionResultListener { _, _ -> reload() }
+    private val permListener = Shizuku.OnRequestPermissionResultListener { _, _ -> runOnUiThread { reload() } }
     // Shizuku's binder attaches asynchronously after process start; re-resolve the
     // scene the moment it arrives — but only while still waiting, so it doesn't
     // double the recents read on a warm open (onResume already reloaded).
     private val binderReceived = Shizuku.OnBinderReceivedListener {
-        if (scene == Scene.LOADING || scene == Scene.SHIZUKU) reload()
+        runOnUiThread { reload() }
     }
-    private val binderDead = Shizuku.OnBinderDeadListener { scene = Scene.SHIZUKU }
+    private val binderDead = Shizuku.OnBinderDeadListener { runOnUiThread { privileged = false; reload() } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,12 +87,12 @@ class RecentsActivity : ComponentActivity() {
         runCatching { Shizuku.addBinderDeadListener(binderDead) }
 
         setContent {
-            RecentsTheme(accent = settings.accent.color) {
+            RecentsTheme(accent = settings.accentColor) {
                 val scrimColor = settings.bgTint.color
                 val scrimAlpha = settings.bgDim / 100f
                 when (scene) {
-                    Scene.LOADING -> {}                       // transparent; backdrop shows dimmed
-                    Scene.SHIZUKU -> ShizukuGate(focus = shzFocus)
+                    Scene.LOADING -> Scrim(scrimColor, scrimAlpha)
+                    Scene.USAGE -> UsageAccessState()
                     Scene.EMPTY -> Box(Modifier.fillMaxSize()) { Scrim(scrimColor, scrimAlpha); EmptyState() }
                     Scene.OVERLAY -> Box(Modifier.fillMaxSize()) {
                         Scrim(scrimColor, scrimAlpha)
@@ -91,15 +100,32 @@ class RecentsActivity : ComponentActivity() {
                             items = buildItems(),
                             focus = focus,
                             gearFocused = gearFocused,
+                            topKillFocused = topKillFocused,
+                            settingsHintVisible = settingsHintVisible,
+                            showTopKillAll = hasTopKillAll(),
+                            closeHintStyle = settings.closeHintStyle,
+                            protectedApps = settings.protectedApps,
                             peekDir = peekDir,
                             dismissing = dismissing,
                             killing = killing,
                             size = settings.size,
                             shape = settings.shape,
+                            cardPadding = settings.cardPadding,
                             taskCount = tasks.size,
+                            position = settings.position,
+                            direction = settings.direction,
+                            showHeader = settings.showHeader,
+                            showSettingsButton = settings.showSettingsButton,
+                            showHelp = settings.showHelp,
+                            showAppNames = settings.showAppNames,
+                            showAppDetails = settings.appDetailsMode.visible(privileged),
+                            smoothMotion = settings.smoothMotion,
                             onDismissComplete = ::onCardFlewOff,
                         )
-                        ctxTask?.let { com.websnake.recentstv.ui.overlay.ContextMenu(it, ctxSelected) }
+                        ctxTask?.let { com.websnake.recentstv.ui.overlay.ContextMenu(it, ctxSelected, privileged, isIndividuallyProtected(it), it.packageName in settings.protectedApps) }
+                        if (killPrompt) com.websnake.recentstv.ui.overlay.KillAllConfirmation(
+                            killAllCandidates().size, tasks.count { it.packageName in settings.protectedApps },
+                            settings.forceStopOnKill, confirmKill)
                     }
                 }
             }
@@ -109,6 +135,25 @@ class RecentsActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         reload()
+        permissionWatch?.cancel()
+        permissionWatch = lifecycleScope.launch {
+            while (true) {
+                delay(1000)
+                val ready = repo.ready()
+                val allowed = repo.hasUsageAccess()
+                if (ready != privileged || (!ready && (scene == Scene.USAGE) == allowed)) reload()
+            }
+        }
+    }
+
+    private var permissionWatch: kotlinx.coroutines.Job? = null
+
+    override fun onPause() {
+        clearSettingsHint()
+        killPrompt = false
+        cancelCenterPress()
+        permissionWatch?.cancel()
+        super.onPause()
     }
 
     @Suppress("DEPRECATION")
@@ -127,14 +172,29 @@ class RecentsActivity : ComponentActivity() {
 
     // ── load / scene routing ───────────────────────────────────────────────
     private fun reload() {
-        lifecycleScope.launch {
+        clearSettingsHint()
+        killPrompt = false
+        cancelCenterPress()
+        actionJob?.cancel()
+        scene = Scene.LOADING
+        reloadJob?.cancel()
+        reloadJob = lifecycleScope.launch {
             settings = withContext(Dispatchers.IO) { store.settings.first() }
-            if (!ShizukuManager.state().ready) {
-                scene = Scene.SHIZUKU
-                shzFocus = 0
+            repo.privilegedEnabled = settings.usePrivileged
+            privileged = repo.ready()
+            killing = false; dismissing = null; peekDir = -1; ctxTask = null; busy = false; topKillFocused = false
+            if (!privileged && !repo.hasUsageAccess()) {
+                tasks.clear()
+                scene = Scene.USAGE
                 return@launch
             }
-            val loaded = withContext(Dispatchers.IO) { repo.getRecentTasks(settings.exceptions) }
+            val useTasks = privileged
+            val loaded = withContext(Dispatchers.IO) {
+                if (useTasks) repo.getRecentTasks(settings.exceptions)
+                else runCatching { repo.getRecentApps(settings.exceptions) }.getOrDefault(emptyList())
+            }
+            if (useTasks != repo.ready()) { reload(); return@launch }
+            if (!useTasks && !repo.hasUsageAccess()) { scene = Scene.USAGE; return@launch }
             tasks.clear(); tasks.addAll(loaded)
             // Reset ALL transient guards — otherwise a warm-reopened overlay (after a
             // switch set busy=true and finish()ed without process death) stays dead.
@@ -151,50 +211,104 @@ class RecentsActivity : ComponentActivity() {
 
     private fun buildItems(): List<OverlayItem> {
         val list = ArrayList<OverlayItem>()
-        if (settings.showKillAll && tasks.isNotEmpty()) list.add(OverlayItem.KillAll)
+        if (privileged && (settings.killAllLocation == KillAllLocation.APP_ROW) && tasks.isNotEmpty()) list.add(OverlayItem.KillAll)
         tasks.forEach { list.add(OverlayItem.Card(it)) }
         return list
     }
 
     private fun defaultFocus(): Int =
-        if (settings.showKillAll && tasks.isNotEmpty()) 1 else 0
+        if (privileged && (settings.killAllLocation == KillAllLocation.APP_ROW) && tasks.isNotEmpty()) 1 else 0
 
     private fun itemCount(): Int = buildItems().size
     private fun isKillAllAt(i: Int): Boolean =
-        settings.showKillAll && tasks.isNotEmpty() && i == 0
+        privileged && (settings.killAllLocation == KillAllLocation.APP_ROW) && tasks.isNotEmpty() && i == 0
     private fun taskAt(i: Int): RecentTask? {
-        val offset = if (settings.showKillAll && tasks.isNotEmpty()) 1 else 0
+        val offset = if (privileged && (settings.killAllLocation == KillAllLocation.APP_ROW) && tasks.isNotEmpty()) 1 else 0
         return tasks.getOrNull(i - offset)
     }
 
     // ── key handling ────────────────────────────────────────────────────────
-    private fun openSettings() = startActivity(Intent(this, SettingsActivity::class.java))
+    private fun openSettings() {
+        clearSettingsHint()
+        startActivity(Intent(this, SettingsActivity::class.java))
+    }
 
+    // This overrides the public android.app.Activity callback. AndroidX core's inherited
+    // library restriction triggers lint here even though no restricted superclass API is called.
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
         val down = event.action == KeyEvent.ACTION_DOWN
         val isCenter = code == KeyEvent.KEYCODE_DPAD_CENTER ||
             code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_BUTTON_A
 
+        if (killPrompt) {
+            if (isCenter && !down) { ignoreCenterUntilUp = false; return true }
+            if (!down || (isCenter && (event.repeatCount > 0 || ignoreCenterUntilUp))) return true
+            when (code) {
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { killPrompt = false; cancelCenterPress(); restoreTopSettingsHint() }
+                KeyEvent.KEYCODE_DPAD_LEFT -> confirmKill = false
+                KeyEvent.KEYCODE_DPAD_RIGHT -> confirmKill = killAllCandidates().isNotEmpty()
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
+                    val proceed = confirmKill
+                    killPrompt = false; cancelCenterPress()
+                    if (proceed) executeKillAll()
+                    else restoreTopSettingsHint()
+                }
+            }
+            return true
+        }
+
         if (down) when (code) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
-                if (ctxTask != null) { ctxTask = null } else finish(); return true
+                clearSettingsHint()
+                cancelCenterPress()
+                if (ctxTask != null) ctxTask = null
+                else if (gearFocused || topKillFocused) { gearFocused = false; topKillFocused = false }
+                else finish()
+                return true
             }
-            KeyEvent.KEYCODE_MENU -> { openSettings(); return true }
+            KeyEvent.KEYCODE_MENU -> { cancelCenterPress(); openSettings(); return true }
+        }
+        // Hidden settings access requires a deliberate second gesture, not a held UP repeat.
+        if (down && code == KeyEvent.KEYCODE_DPAD_UP && event.repeatCount > 0) return true
+        if (down && code != KeyEvent.KEYCODE_DPAD_UP && !topKillFocused) clearSettingsHint()
+
+        // Consume the entire press that opened the menu, including repeated downs and
+        // its release. Choosing a menu action always requires a fresh OK press.
+        if (isCenter && down && event.repeatCount > 0) {
+            if (centerHeld && ctxTask == null && !gearFocused && !topKillFocused && !isKillAllAt(focus))
+                taskAt(focus)?.let { openHeldMenu(it) }
+            return true
+        }
+        if (isCenter && event.action == KeyEvent.ACTION_UP) {
+            longPressJob?.cancel()
+            if (ignoreCenterUntilUp) { cancelCenterPress(); return true }
+            if (!centerHeld) return true
+            centerHeld = false
         }
 
         // Context menu, when open, captures everything.
+        if (isCenter && ignoreCenterUntilUp) return true
         if (ctxTask != null) {
-            if (down) handleCtxKey(code)
+            if (down) {
+                if (isCenter) ignoreCenterUntilUp = true
+                handleCtxKey(code)
+            }
             return true
         }
 
         // Overlay OK: hold = context menu; tap (on key-up) = activate.
-        if (scene == Scene.OVERLAY && isCenter && !gearFocused && !busy && !killing && dismissing == null) {
+        if (scene == Scene.OVERLAY && isCenter && !gearFocused && !topKillFocused && !busy && !killing && dismissing == null) {
             if (down) {
-                if (event.repeatCount == 1 && !isKillAllAt(focus) && taskAt(focus) != null) {
-                    longPressFired = true
-                    ctxSelected = 0; ctxTask = taskAt(focus)
+                if (!centerHeld) {
+                    centerHeld = true
+                    longPressFired = false
+                    val task = taskAt(focus)
+                    if (!isKillAllAt(focus) && task != null) longPressJob = lifecycleScope.launch {
+                        delay(android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                        openHeldMenu(task)
+                    }
                 }
                 return true
             }
@@ -207,9 +321,11 @@ class RecentsActivity : ComponentActivity() {
         if (!down) return true
         when (scene) {
             Scene.LOADING -> {}
-            Scene.SHIZUKU -> handleShizukuKey(code)
+            Scene.USAGE -> when (code) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> openUsageAccess()
+            }
             Scene.EMPTY -> when (code) {              // no apps, but Settings still reachable
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> finish()
                 KeyEvent.KEYCODE_DPAD_UP -> openSettings()
             }
             Scene.OVERLAY -> handleOverlayKey(code)
@@ -219,13 +335,39 @@ class RecentsActivity : ComponentActivity() {
 
     private fun handleCtxKey(code: Int) {
         val task = ctxTask ?: return
+        val canClose = privileged && !isIndividuallyProtected(task)
+        val actions = buildList {
+            add(0)
+            if (canClose) add(1)
+            if (privileged) add(2)
+            add(3)
+        }
+        val index = actions.indexOf(ctxSelected).coerceAtLeast(0)
         when (code) {
-            KeyEvent.KEYCODE_DPAD_UP -> ctxSelected = (ctxSelected - 1).coerceAtLeast(0)
-            KeyEvent.KEYCODE_DPAD_DOWN -> ctxSelected = (ctxSelected + 1).coerceAtMost(2)
+            KeyEvent.KEYCODE_DPAD_UP -> ctxSelected = actions[(index - 1).coerceAtLeast(0)]
+            KeyEvent.KEYCODE_DPAD_DOWN -> ctxSelected = actions[(index + 1).coerceAtMost(actions.lastIndex)]
             KeyEvent.KEYCODE_DPAD_LEFT -> ctxTask = null
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
                 executeCtx(task, ctxSelected)
         }
+    }
+
+    private fun cancelCenterPress() {
+        longPressJob?.cancel()
+        longPressJob = null
+        centerHeld = false
+        ignoreCenterUntilUp = false
+        longPressFired = false
+    }
+
+    private fun openHeldMenu(task: RecentTask) {
+        if (!centerHeld || ctxTask != null || scene != Scene.OVERLAY || busy || killing || dismissing != null) return
+        longPressJob?.cancel()
+        ignoreCenterUntilUp = true
+        longPressFired = true
+        peekDir = -1
+        ctxSelected = 0
+        ctxTask = task
     }
 
     private fun removeFromView(task: RecentTask) {
@@ -242,11 +384,27 @@ class RecentsActivity : ComponentActivity() {
                 removeFromView(task)
             }
             1 -> {                                    // kill app
+                if (!privileged || !repo.ready()) return
+                if (isIndividuallyProtected(task)) { showProtectedNotice(); return }
                 removeFromView(task)
                 val fs = settings.forceStopOnKill
-                lifecycleScope.launch { withContext(Dispatchers.IO) { repo.dismiss(task, fs) } }
+                val protectedPackages = individualProtectionPackages()
+                actionJob = lifecycleScope.launch { withContext(Dispatchers.IO) { repo.dismiss(task, fs, protectedPackages) } }
             }
-            2 -> {                                    // app info
+            2 -> {
+                if (!privileged || !repo.ready() || busy) return
+                busy = true
+                actionJob = lifecycleScope.launch {
+                    try {
+                        store.toggleProtectedApp(task.packageName)
+                        settings = store.settings.first()
+                        android.widget.Toast.makeText(this@RecentsActivity,
+                            if (task.packageName in settings.protectedApps) "App protected" else "App unprotected",
+                            android.widget.Toast.LENGTH_SHORT).show()
+                    } finally { busy = false }
+                }
+            }
+            3 -> {                                    // app info
                 runCatching {
                     startActivity(
                         Intent(
@@ -262,24 +420,67 @@ class RecentsActivity : ComponentActivity() {
 
     private fun handleOverlayKey(code: Int) {
         if (busy || killing) return
+        if (topKillFocused) {
+            when (code) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> { topKillFocused = false; clearSettingsHint() }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (settings.showSettingsButton) { topKillFocused = false; gearFocused = true }
+                KeyEvent.KEYCODE_DPAD_UP -> if (!settings.showSettingsButton) openSettings() else requestSettingsAccess()
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> killAll()
+            }
+            return
+        }
         if (gearFocused) {
             when (code) {
-                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT ->
-                    gearFocused = false
+                KeyEvent.KEYCODE_DPAD_UP -> if (!settings.showSettingsButton) requestSettingsAccess()
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (!settings.showSettingsButton) gearFocused = false
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (!settings.showSettingsButton) gearFocused = false
+                    else if (hasTopKillAll()) { gearFocused = false; topKillFocused = true }
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> gearFocused = false
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
-                    startActivity(Intent(this, SettingsActivity::class.java))
+                    if (settings.showSettingsButton) openSettings()
             }
             return
         }
         when (code) {
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { peekDir = -1; moveFocus(-1) }   // toward Kill-All
-            KeyEvent.KEYCODE_DPAD_LEFT -> { peekDir = -1; moveFocus(+1) }    // toward older
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { peekDir = -1; moveFocus(if (settings.direction == com.websnake.recentstv.data.AppDirection.OLDER_RIGHT) +1 else -1) }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { peekDir = -1; moveFocus(if (settings.direction == com.websnake.recentstv.data.AppDirection.OLDER_RIGHT) -1 else +1) }
             KeyEvent.KEYCODE_DPAD_UP ->
                 if (peekDir == 1) peekDir = -1          // cancel a pending peek → card back to normal
-                else gearFocused = true                 // otherwise UP → settings gear
+                else requestSettingsAccess()
             KeyEvent.KEYCODE_DPAD_DOWN -> if (!isKillAllAt(focus)) dismissStep(1)  // DOWN → dismiss/kill flow
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> activate()
         }
+    }
+
+    private fun hasTopKillAll() = privileged && tasks.isNotEmpty() && settings.killAllLocation == KillAllLocation.TOP_CONTROLS
+
+    private fun requestSettingsAccess() {
+        if (settings.showSettingsButton) {
+            clearSettingsHint()
+            gearFocused = true; topKillFocused = false
+        }
+        else if (hasTopKillAll()) { topKillFocused = true; gearFocused = false; showSettingsHint(false) }
+        else if (settingsHintVisible) openSettings()
+        else showSettingsHint(true)
+    }
+
+    private fun showSettingsHint(autoDismiss: Boolean) {
+        settingsHintJob?.cancel()
+        settingsHintVisible = true
+        if (autoDismiss) settingsHintJob = lifecycleScope.launch { delay(3000); settingsHintVisible = false }
+    }
+
+    private fun clearSettingsHint() {
+        settingsHintJob?.cancel(); settingsHintJob = null
+        settingsHintVisible = false
+    }
+
+    private fun restoreTopSettingsHint() {
+        if (topKillFocused && !settings.showSettingsButton) showSettingsHint(false)
     }
 
     private fun moveFocus(d: Int) {
@@ -288,7 +489,9 @@ class RecentsActivity : ComponentActivity() {
     }
 
     private fun dismissStep(dir: Int) {
+        if (!privileged || !repo.ready()) return
         if (isKillAllAt(focus)) return
+        if (taskAt(focus)?.let(::isIndividuallyProtected) == true) { peekDir = -1; showProtectedNotice(); return }
         if (dismissing != null) return
         if (peekDir == dir) {
             // stage 2 — fly off & remove
@@ -301,9 +504,11 @@ class RecentsActivity : ComponentActivity() {
     }
 
     private fun onCardFlewOff(taskId: Int) {
+        if (!privileged || !repo.ready()) { reload(); return }
         val idx = tasks.indexOfFirst { it.taskId == taskId }
         if (idx < 0) { dismissing = null; return }
         val task = tasks[idx]
+        if (isIndividuallyProtected(task)) { dismissing = null; peekDir = -1; showProtectedNotice(); return }
         // Remove from the UI immediately so the row collapses with no leftover gap;
         // the privileged removeTask runs in the background.
         tasks.removeAt(idx)
@@ -312,7 +517,8 @@ class RecentsActivity : ComponentActivity() {
         if (tasks.isEmpty()) scene = Scene.EMPTY
         else focus = focus.coerceIn(0, itemCount() - 1)
         val fs = settings.forceStopOnKill
-        lifecycleScope.launch { withContext(Dispatchers.IO) { repo.dismiss(task, fs) } }
+        val protectedPackages = individualProtectionPackages()
+        actionJob = lifecycleScope.launch { withContext(Dispatchers.IO) { repo.dismiss(task, fs, protectedPackages) } }
     }
 
     private fun activate() {
@@ -323,14 +529,20 @@ class RecentsActivity : ComponentActivity() {
     private fun switchTo(task: RecentTask) {
         if (busy) return
         busy = true
-        lifecycleScope.launch {
+        actionJob = lifecycleScope.launch {
             val moved = withContext(Dispatchers.IO) { repo.switchTo(task) }
+            var launched = moved
             if (!moved) {
                 // fallback: relaunch via the app's own launch intent
                 val li = packageManager.getLeanbackLaunchIntentForPackage(task.packageName)
                     ?: packageManager.getLaunchIntentForPackage(task.packageName)
                 li?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { li?.let { startActivity(it) } }
+                launched = li != null && runCatching { startActivity(li); true }.getOrDefault(false)
+            }
+            if (!launched) {
+                busy = false
+                android.widget.Toast.makeText(this@RecentsActivity, "Unable to open this app", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
             }
             delay(120)
             finish()                                   // reveal the now-foregrounded app
@@ -338,36 +550,67 @@ class RecentsActivity : ComponentActivity() {
     }
 
     private fun killAll() {
+        if (!privileged || !repo.ready() || busy) return
+        clearSettingsHint()
+        if (!settings.confirmKillAll) { cancelCenterPress(); executeKillAll(); return }
+        cancelCenterPress()
+        ignoreCenterUntilUp = topKillFocused
+        confirmKill = false
+        killPrompt = true
+    }
+
+    private fun killAllCandidates() = tasks.filterNot { it.packageName in settings.protectedApps }
+
+    private fun individualProtectionPackages() = if (settings.protectIndividualCloses) settings.protectedApps else emptySet()
+    private fun isIndividuallyProtected(task: RecentTask) = task.packageName in individualProtectionPackages()
+    private var protectedNoticeAt = 0L
+    private fun showProtectedNotice() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - protectedNoticeAt < 1800) return
+        protectedNoticeAt = now
+        android.widget.Toast.makeText(this, "Protected app · change protection in Settings → Apps", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun executeKillAll() {
+        if (!privileged || !repo.ready()) return
         if (busy) return
+        val snapshot = killAllCandidates()
+        if (snapshot.isEmpty()) {
+            restoreTopSettingsHint()
+            android.widget.Toast.makeText(this, "All recent apps are protected", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
         busy = true
         killing = true
-        val snapshot = tasks.toList()
+        val protectedPackages = settings.protectedApps
         val fs = settings.forceStopOnKill
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) { repo.killAll(snapshot, fs) }
-            delay(520)                                  // let the staggered fly-up play
-            tasks.clear()
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        actionJob = lifecycleScope.launch {
+            withContext(Dispatchers.IO) { repo.killAll(snapshot, fs, protectedPackages) }
+            val animationTime = if (settings.smoothMotion) 240L + (snapshot.size - 1).coerceAtLeast(0) * 20L else 0L
+            val remaining = animationTime - (android.os.SystemClock.elapsedRealtime() - startedAt)
+            if (remaining > 0) delay(remaining)
+            val closedPackages = snapshot.mapTo(HashSet()) { it.packageName }
+            tasks.removeAll { it.packageName in closedPackages }
             killing = false
             busy = false
-            scene = Scene.EMPTY
+            if (tasks.isEmpty()) scene = Scene.EMPTY
+            else { focus = defaultFocus(); scene = Scene.OVERLAY }
         }
     }
 
-    private fun handleShizukuKey(code: Int) {
-        when (code) {
-            KeyEvent.KEYCODE_DPAD_LEFT -> shzFocus = (shzFocus + 1).coerceAtMost(1)
-            KeyEvent.KEYCODE_DPAD_RIGHT -> shzFocus = (shzFocus - 1).coerceAtLeast(0)
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
-                // Either button advances the flow so a mis-focus can't strand the user.
-                val st = ShizukuManager.state()
-                if (!st.binderAlive) {
-                    ShizukuManager.openShizuku(this)         // Shizuku service not running
-                } else if (!st.permissionGranted) {
-                    ShizukuManager.requestPermission()       // running but not granted
-                }
-                reload()
-            }
+    private fun openUsageAccess() {
+        val intents = listOf(
+            Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS,
+                android.net.Uri.parse("package:$packageName")),
+            Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS),
+            Intent(android.provider.Settings.ACTION_SETTINGS),
+        )
+        for (intent in intents) {
+            if (runCatching { startActivity(intent); true }.getOrDefault(false)) return
         }
+        android.widget.Toast.makeText(this, "Open Settings > Apps > Special app access > Usage access",
+            android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
@@ -378,3 +621,9 @@ class RecentsActivity : ComponentActivity() {
 private fun Scrim(color: Color, alpha: Float) {
     Box(Modifier.fillMaxSize().background(color.copy(alpha = alpha)))
 }
+
+
+
+
+
+

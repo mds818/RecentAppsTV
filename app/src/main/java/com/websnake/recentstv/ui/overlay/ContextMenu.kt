@@ -32,10 +32,9 @@ import com.websnake.recentstv.ui.theme.LocalAccent
 import com.websnake.recentstv.ui.theme.Tokens
 import com.websnake.recentstv.ui.theme.Type
 
-/** Long-press context menu over a focused card: Add to exceptions / Kill app /
- *  App info. [selected] = highlighted row (0..2). */
+/** Context actions use stable IDs: exceptions 0, close 1, protection 2, app info 3. */
 @Composable
-fun ContextMenu(task: RecentTask, selected: Int) {
+fun ContextMenu(task: RecentTask, selected: Int, canManageTasks: Boolean = true, closeProtected: Boolean = false, appProtected: Boolean = false) {
     val accent = LocalAccent.current
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
@@ -44,11 +43,11 @@ fun ContextMenu(task: RecentTask, selected: Int) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .widthIn(min = 360.dp)
+                .width(400.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Tokens.surface)
                 .border(1.dp, Tokens.line, RoundedCornerShape(20.dp))
-                .padding(28.dp),
+                .padding(22.dp),
         ) {
             // app header
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,17 +68,26 @@ fun ContextMenu(task: RecentTask, selected: Int) {
             }
             Spacer(Modifier.size(20.dp))
 
-            MenuRow("Add to exceptions", "Hide this app from recents", selected == 0, accent.base)
+            MenuRow("Add to exceptions", if (canManageTasks) "Hide from recents and exclude from Kill All" else "Hide this app from recents", selected == 0, accent.base)
+            if (canManageTasks) {
+                Spacer(Modifier.size(8.dp))
+                MenuRow("Close app", if (closeProtected) "Protected · change protection in Settings → Apps" else "Remove task; use the force-stop preference",
+                    selected == 1, accent.base, enabled = !closeProtected)
+                Spacer(Modifier.size(8.dp))
+                MenuRow(if (appProtected) "Unprotect app" else "Protect app",
+                    if (appProtected) "Remove from the protected-app list" else "Keep this app safe from Kill All",
+                    selected == 2, accent.base)
+            }
             Spacer(Modifier.size(8.dp))
-            MenuRow("Kill app", "Force-stop and remove from recents", selected == 1, accent.base)
-            Spacer(Modifier.size(8.dp))
-            MenuRow("App info", "Open the system app settings", selected == 2, accent.base)
+            MenuRow("App info", "Open the system app settings", selected == 3, accent.base)
+            Text("↑↓ Choose · OK Select · BACK Cancel", style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.padding(top = 16.dp))
         }
     }
 }
 
 @Composable
-private fun MenuRow(title: String, desc: String, focused: Boolean, accent: Color) {
+private fun MenuRow(title: String, desc: String, focused: Boolean, accent: Color, enabled: Boolean = true) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -88,7 +96,8 @@ private fun MenuRow(title: String, desc: String, focused: Boolean, accent: Color
             .border(1.5.dp, if (focused) accent else Color.Transparent, RoundedCornerShape(12.dp))
             .padding(horizontal = 20.dp, vertical = 13.dp),
     ) {
-        Text(title, style = Type.row, color = if (focused) accent else Tokens.text)
+        Text(title, style = Type.row, color = if (!enabled) Tokens.textFaint else if (focused) accent else Tokens.text)
         Text(desc, style = Type.small, color = Tokens.textDim, modifier = Modifier.padding(top = 2.dp))
     }
 }
+

@@ -1,6 +1,8 @@
 package com.websnake.recentstv.ui.settings
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,10 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
@@ -41,9 +46,13 @@ fun ExceptionsScreen(
     apps: List<InstalledApp>,
     excluded: Set<String>,
     focus: Int,
+    protection: Boolean = false,
+    protectIndividual: Boolean = true,
+    loading: Boolean = false,
+    loadError: Boolean = false,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(focus) {
+    LaunchedEffect(focus, apps.map { it.packageName }) {
         if (focus in apps.indices) listState.animateScrollToItem(focus)
     }
 
@@ -52,20 +61,32 @@ fun ExceptionsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("‹", style = Type.hero, color = Tokens.textDim)
                 Spacer(Modifier.width(14.dp))
-                Text("Exceptions", style = Type.hero, color = Tokens.text)
+                Text(if (protection) "Protected apps" else "Exceptions", style = Type.hero, color = Tokens.text)
             }
             Text(
-                "Hidden apps are filtered out of the overlay.",
+                if (protection) {
+                    if (protectIndividual) "Chosen apps are protected from Kill All, DOWN and the context-menu close action."
+                    else "Chosen apps are protected from Kill All. Individual closing is allowed."
+                } else "Hidden apps stay out of Recents and are skipped by Kill All. Hiding does not close them.",
                 style = Type.body, color = Tokens.textDim,
                 modifier = Modifier.padding(top = 4.dp, bottom = 22.dp),
             )
-            LazyColumn(
+            if (loading || loadError || apps.isEmpty()) {
+                AppListStatus(loading, loadError)
+            } else LazyColumn(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 itemsIndexed(apps, key = { _, a -> a.packageName }) { i, app ->
-                    ExcRow(app = app, excluded = app.packageName in excluded, focused = i == focus)
+                    val hidden = app.packageName in excluded
+                    Column {
+                        if (i == 0 || hidden != (apps[i-1].packageName in excluded)) {
+                            Text(if (hidden) { if (protection) "Protected apps" else "Hidden apps" } else "Other apps", style = Type.label,
+                                color = LocalAccent.current.base, modifier = Modifier.padding(top = 10.dp, bottom = 12.dp))
+                        }
+                        ExcRow(app = app, excluded = hidden, focused = i == focus, protection = protection)
+                    }
                 }
             }
         }
@@ -85,7 +106,28 @@ fun ExceptionsScreen(
 }
 
 @Composable
-private fun ExcRow(app: InstalledApp, excluded: Boolean, focused: Boolean) {
+private fun AppListStatus(loading: Boolean, error: Boolean) {
+    val accent = LocalAccent.current
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (loading) {
+                val transition = rememberInfiniteTransition(label = "app-list-loading")
+                val angle by transition.animateFloat(0f, 360f,
+                    infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spinner")
+                Canvas(Modifier.size(34.dp)) {
+                    drawArc(accent.base, angle, 260f, false, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                }
+            }
+            Text(if (loading) "Loading apps…" else if (error) "Could not load apps" else "No available apps",
+                style = Type.title, color = Tokens.text)
+            Text(if (loading) "Reading installed apps and icons" else if (error) "OK Retry · BACK Return" else "BACK Return",
+                style = Type.small, color = Tokens.textDim)
+        }
+    }
+}
+
+@Composable
+private fun ExcRow(app: InstalledApp, excluded: Boolean, focused: Boolean, protection: Boolean) {
     val accent = LocalAccent.current
     Row(
         Modifier
@@ -119,7 +161,7 @@ private fun ExcRow(app: InstalledApp, excluded: Boolean, focused: Boolean) {
             Text(app.tag, style = Type.small, color = Tokens.textDim)
         }
         Text(
-            if (excluded) "Hidden from recents" else "Shown",
+            if (protection) { if (excluded) "Protected" else "Included in Kill All" } else if (excluded) "Hidden from recents" else "Shown",
             style = Type.small,
             color = if (excluded) accent.base else Tokens.textDim,
             modifier = Modifier.padding(end = 14.dp),

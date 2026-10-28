@@ -14,6 +14,7 @@ data class RecentTask(
     val label: String,
     val icon: Drawable?,
     val category: String = "",
+    val isUsageEntry: Boolean = false,
 )
 
 /** A launchable installed app, for the Exceptions list. */

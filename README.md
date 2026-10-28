@@ -1,97 +1,72 @@
-# Recent Apps TV
+# RecentAppsTV-Fallback
 
-A lightweight **Recent Apps / overview switcher for Android TV & Google TV** — for the
-many TV devices that have **no system "recent apps" UI**. It appears as a translucent
-**dialog over whatever app is running**, lets you switch tasks, dismiss a single task
-(D-pad swipe-to-dismiss), or kill everything — using the **remote / D-pad only**.
+A remote-friendly recent-app switcher for Android TV and Google TV, based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV).
 
-Because Android TV restricts the APIs needed to read the task list and remove tasks, the
-app uses **[Shizuku](https://shizuku.rikka.app/)** to obtain the elevated permissions at
-runtime (no root required).
-
-> Built natively in **Kotlin + Jetpack Compose for TV** from a Claude Design handoff.
-
----
+Porter/Shizuku is optional. Authorized privileged access provides actual Android tasks, switching and closing. Without it, Android Usage Access provides recently used apps you can launch. History entries do not mean an app is running. Fallback requires no debugging, root or privileged manager.
 
 ## Features
 
-- **RTL icon carousel** over the running app — Kill-All tile pinned far-right, most-recent
-  app next to it, older apps flowing left; the strip clamps so Kill-All is always visible.
-  The focused app's name is shown as a single label centered along the bottom.
-- **D-pad only**:
-  - **← / →** move focus · **OK** switch to that app · **OK on Kill-All** clears everything · **Back** closes.
-  - **Down** arms the kill flow: the card peeks with a *"Press again to remove"* hint; **Down again** flies it off and removes it. **Up** while peeking cancels.
-  - **Up** (when not peeking) jumps focus to the **settings gear** (top-right).
-- **Long-press OK** on a card → context menu: **Add to exceptions**, **Kill app**, **App info**.
-- **Real removal** — removes *every* task for an app (apps can own several) and, optionally,
-  **force-stops** it so it can't relaunch. Disabled/uninstalled apps are filtered out.
-- **Settings** (D-pad): Show Kill-All, Force-stop on kill, Card size (S/M/L), Card shape
-  (Square/Rounded/Circle), **Accent colour** (5 presets), **Background dim** (0–100 % bar),
-  **Background colour**, and an **Exceptions** list (per-app hide toggles). Persisted in DataStore.
-- **Shizuku gate** when the service isn't running / not granted, and an **Empty** state
-  (Settings still reachable).
-- **Themeable** — one accent colour drives every focus ring and the Kill-All tile.
+- Automatic native-task / usage-history fallback, with an optional privileged-mode switch.
+- D-pad navigation, held-OK context menu and deliberate two-press closing.
+- Protected apps, hidden-app exceptions, optional Kill All confirmation and force-stop.
+- Centered/side layout, left/right browsing, card size/shape/padding, custom accent chart and background controls.
+- Independent app names, details, header, Settings button and help visibility.
+- Default, Clean, Clean+ and Classic presets with a persistent pre-preset appearance restore point.
+- No ads, analytics, account or app-operated external service.
 
-## Launching it
+## Setup
 
-There is **no in-app "how to open" trigger** by design. The overlay is launched externally:
+Android 7.0+ (API 24). Testing has focused on a Xiaomi TV Box running Android 14; other TV firmware needs broader testing.
 
-- It registers as a **leanback launcher** entry, and
-- publishes a **static + dynamic launcher shortcut**.
+1. Install the signed APK from [Releases](https://github.com/mds818/RecentAppsTV/releases).
+2. Open Recent Apps and allow Usage Access if using history mode.
+3. Optionally start [Porter](https://porter.darken.eu/setup) or [Shizuku](https://shizuku.rikka.app/guide/setup/) and grant this app access. Closing controls appear only in authorized task mode.
 
-Bind a remote button to it (via a button-remapper / shortcut app) using the component:
+To open from a remote button, use an external remapping app with this preserved component:
 
-```
-com.websnake.recentstv/.RecentsActivity        (action: com.websnake.recentstv.OPEN_RECENTS)
+```text
+com.websnake.recentstv/.RecentsActivity
 ```
 
-Settings: `com.websnake.recentstv/.SettingsActivity` (also via the in-overlay gear, or MENU).
+## Controls
 
-## Requirements
+| Button | Action |
+| --- | --- |
+| LEFT / RIGHT | Browse apps |
+| OK | Open the selected app/control |
+| Hold OK | App context menu |
+| DOWN twice | Close a task when privileged access permits |
+| UP | Cancel close preview, or move toward top controls |
+| UP twice with Settings hidden | Open Settings; first press shows a notice or selects top Kill All |
+| MENU | Open Settings |
+| BACK | Cancel or dismiss |
 
-- Android TV / Google TV, **Android 7+ (minSdk 24)**.
-- **Shizuku** installed and running, with permission granted to this app.
+When both top controls are visible, Kill All is left and Settings is right; UP focuses Settings first. Hidden apps are excluded from Kill All. Protected apps are always skipped by Kill All; individual protection has its own switch.
 
-## How it works (Shizuku)
+## Presets
 
-The privileged work is isolated in `RecentTasksRepository`, run under the Shizuku **shell**
-identity (which holds `REMOVE_TASKS`, `MANAGE_ACTIVITY_TASKS`, `FORCE_STOP_PACKAGES`):
+| Preset | Starting appearance |
+| --- | --- |
+| Default | Reset appearance, keeping app lists and closing/service choices |
+| Clean | Centered, app names, Normal padding, app-row Kill All; header/gear/help/details off |
+| Clean+ | Centered icons, Compact padding; no labels/header/gear/help; Kill All hidden |
+| Classic | Side layout, names/guidance, app-row Kill All |
 
-| Action  | Mechanism |
-|---------|-----------|
-| read    | shell `am stack list` / `dumpsys activity recents` (the privileged `getRecentTasks` binder only returns the caller's own task under the shell identity) |
-| switch  | `IActivityTaskManager.moveTaskToFront` (reflection) → launch-intent fallback |
-| dismiss | `IActivityTaskManager.removeTask(taskId)` for every task of the package (+ optional `forceStopPackage`) |
-| kill all| `removeTask` per task (+ optional force-stop) |
+All start with Large circular cards, Green, 80% Black dim, Minimal close hint and smooth motion. Default/Classic details appear only with privileged access. The first applied preset saves the previous appearance across further presets and app restarts. Restore consumes that checkpoint; full Reset also clears it and app lists.
 
-`HiddenApiBypass` lifts the hidden-API blocklist; `ShizukuBinderWrapper` routes the calls.
+## Build
 
-## Architecture
+Use JDK 17 and Android SDK platform/build-tools 35. Keys and machine-specific Java/SDK paths are not committed.
 
-```
-com.websnake.recentstv
-├─ RecentsActivity        // translucent dialog; scene routing + D-pad handling
-├─ SettingsActivity       // leanback-style settings + exceptions sub-screen
-├─ RecentsApp             // HiddenApiBypass init + dynamic shortcut
-├─ shizuku/ShizukuManager // binder lifecycle + permission flow
-├─ data/                  // RecentTasksRepository, PackageRepository, SettingsStore (DataStore)
-└─ ui/                    // theme tokens + LocalAccent, overlay carousel, context menu, settings, states
-```
-
-**Smoothness notes** (weak TV GPU): animated values are read via `State.value` *inside*
-`graphicsLayer{}` (draw phase, no recomposition); the carousel is a single translated layer
-(`wrapContentWidth(unbounded=true)` so it sizes to content); focus glow is a `drawBehind`
-radial gradient (no `RenderEffect` blur); cards are keyed and `@Immutable`; icons are
-downscaled. Ship a **release** build — non-debuggable Compose is dramatically smoother.
-
-## Building
-
-```bash
-# Android SDK + JDK 17 required
-./gradlew :app:assembleRelease
-# → app/build/outputs/apk/release/app-release.apk
+```powershell
+./build-local.ps1 -JdkPath C:/path/to/jdk17 -SdkPath C:/path/to/android-sdk -Variant Debug
+./build-local.ps1 -JdkPath C:/path/to/jdk17 -SdkPath C:/path/to/android-sdk -Variant Release
 ```
 
-## Credits
+Alternatively configure JAVA_HOME/local.properties and run gradlew.bat assembleDebug or assembleRelease. Release output is unsigned until signed externally; see [signing](docs/SIGNING.md) and [validation](docs/VALIDATION.md).
 
-Original design medium: HTML/CSS/JS prototype (Claude Design). Shizuku by RikkaApps.
+## Attribution and status
+
+Based on [Qutaiba-Khader/RecentAppsTV](https://github.com/Qutaiba-Khader/RecentAppsTV), with original attribution retained and no upstream endorsement claimed. The upstream repository had no declared license when checked. This is an unofficial bugfix fork with limited planned maintenance. Upstream licensing has not been clarified; no permission from the upstream author or blanket license for their code is asserted. See [attribution](UPSTREAM.md) and [dependency notices](THIRD_PARTY_NOTICES.md).
+
+No screenshots, device logs, personal profiles or installed-app inventories are included. Screenshots can be added later after privacy review.
