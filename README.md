@@ -4,7 +4,7 @@
 
 Choose a starting look, then adjust the details to suit your remote and your TV. Use it with **Usage Access alone**, or optionally connect **Porter / Shizuku** for actual task switching and closing.
 
-[**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-showcase.mp4) · [Getting started](#getting-started)
+[**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
 ## Choose your everyday look
 
@@ -37,7 +37,11 @@ Four presets, shown with the same selected app and background. Click a picture t
   </tr>
 </table>
 
-**[▶ Watch the 37-second demo](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-showcase.mp4)** — browse in all four presets, then close an app from the middle of the row. The closing portion is labelled **0.5× slow motion** so the short animation is easier to see.
+## See it in use
+
+https://github.com/user-attachments/assets/eb2a81f1-0f20-44a3-8ce1-12d05283680a
+
+Browse in all four presets, then close an app from the middle of the row. The closing portion is labelled **0.5× slow motion** so the short animation is easier to see. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-showcase.mp4).
 
 Presets are starting points. Mix and match the settings afterward. Your previous appearance is saved when you first apply a preset and stays available through further preset changes and app restarts. **Restore previous appearance** brings it back. App lists and service/closing preferences are kept when applying presets.
 
@@ -67,6 +71,23 @@ Keep only the information and controls you want to see.
 
 Protected apps are always skipped by Kill All. Hidden apps are also skipped by default; turn off **Exclude hidden apps from Kill All** to include them. Closing features require authorized Porter/Shizuku access.
 
+## App actions
+
+Hold OK for app actions, or press DOWN twice to deliberately close a task when privileged access is available.
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>Long-press menu</strong><br>
+      <a href="docs/images/context-menu.png"><img src="docs/images/context-menu.png" alt="Long-press menu with hide, close, protect and app-info actions" width="480"></a>
+    </td>
+    <td width="50%">
+      <strong>Close with a second press</strong><br>
+      <a href="docs/images/close-hint.png"><img src="docs/images/close-hint.png" alt="A downward preview and Press again to close hint beneath the selected app" width="480"></a>
+    </td>
+  </tr>
+</table>
+
 <details>
 <summary><strong>See the settings and color chart</strong></summary>
 
@@ -74,7 +95,11 @@ Protected apps are always skipped by Kill All. Hidden apps are also skipped by d
 
 ![Accent presets and expanded color chart](docs/images/accent-colors.png)
 
-[Watch the settings tour](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-settings-tour.mp4) for the context menu, close hint, preset picker and color chart.
+### Settings tour
+
+https://github.com/user-attachments/assets/2ce0d35b-b7cd-4480-8857-4062d9a3311c
+
+The context menu, close hint, preset picker and color chart. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.0/RecentAppsTV-settings-tour.mp4).
 
 </details>
 
