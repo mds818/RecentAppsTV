@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,7 +26,7 @@ enum class SetRow(val section: String? = null) {
 enum class SettingsSection(val title: String, val description: String, val rows: List<SetRow>) {
     APPEARANCE("Appearance", "Cards, colors, layout and app labels", listOf(SetRow.POSITION, SetRow.DIRECTION, SetRow.SIZE, SetRow.SHAPE, SetRow.PADDING, SetRow.ACCENT, SetRow.BG_DIM, SetRow.BG_TINT, SetRow.HEADER, SetRow.APP_NAMES, SetRow.APP_TEXT_POSITION, SetRow.APP_DETAILS)),
     CONTROLS("Controls", "Settings access, close hint and motion", listOf(SetRow.SETTINGS_BUTTON, SetRow.CLOSE_HINT, SetRow.HELP, SetRow.MOTION, SetRow.CLOSE_SPEED)),
-    APPS("Apps", "Kill All, protected apps and app exceptions", listOf(SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION, SetRow.EXCEPTIONS, SetRow.HIDDEN_KILL_EXCLUSION)),
+    APPS("Apps", "App visibility and optional privileged closing", listOf(SetRow.EXCEPTIONS, SetRow.KILL_ALL, SetRow.CONFIRM_KILL_ALL, SetRow.HIDDEN_KILL_EXCLUSION, SetRow.PROTECTED_APPS, SetRow.INDIVIDUAL_PROTECTION)),
     ADVANCED("Advanced", "Porter / Shizuku access and force-stop", listOf(SetRow.PRIVILEGED, SetRow.MANAGER, SetRow.FORCE_STOP));
     companion object { fun forRow(row: SetRow): SettingsSection? = entries.firstOrNull { row in it.rows } }
 }
@@ -39,9 +38,9 @@ object SettingsMenu {
 }
 
 @Composable
-fun SettingsHome(focus: Int) {
+fun SettingsHome(focus: Int, smoothMotion: Boolean = true) {
     val listState = rememberLazyListState()
-    LaunchedEffect(focus) { listState.animateScrollToItem(focus) }
+    KeepFocusedItemVisible(listState, focus, smoothMotion)
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 60.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Recent Apps · Settings", style = Type.title, color = Tokens.text)
@@ -49,6 +48,7 @@ fun SettingsHome(focus: Int) {
                 modifier = Modifier.padding(bottom = 12.dp))
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(SettingsMenu.reset + 1) { index ->
+                    Column {
                     if (index < SettingsSection.entries.size) {
                         val section = SettingsSection.entries[index]
                         SettingRow(section.title, section.description, focus == index, compact = true) {
@@ -66,6 +66,7 @@ fun SettingsHome(focus: Int) {
                             Text("Reset…", style = Type.small, color = Tokens.textDim)
                         }
                     }
+                    }
                 }
             }
         }
@@ -73,11 +74,9 @@ fun SettingsHome(focus: Int) {
 }
 
 @Composable
-fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: Int, exceptionsSummary: String, protectedSummary: String, managerName: String, managerStatus: String) {
+fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: Int, exceptionsSummary: String, protectedSummary: String, managerName: String, managerStatus: String, privilegedActive: Boolean? = null) {
     val listState = rememberLazyListState()
-    LaunchedEffect(section, focus) {
-        if (settings.smoothMotion) listState.animateScrollToItem(focus) else listState.scrollToItem(focus)
-    }
+    KeepFocusedItemVisible(listState, focus, settings.smoothMotion, section)
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
         Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 32.dp)) {
             Text("Settings · ${section.title}", style = Type.title, color = Tokens.text)
@@ -87,15 +86,26 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                 items(section.rows.size) { index ->
                     val row = section.rows[index]
                     Column {
-                        if (section == SettingsSection.APPS) {
-                            val group = when (row) {
-                                SetRow.KILL_ALL -> "Closing"
-                                SetRow.PROTECTED_APPS -> "Protection"
-                                SetRow.EXCEPTIONS -> "Visibility"
-                                else -> null
-                            }
-                            if (group != null) Text(group, style = Type.small, color = LocalAccent.current.base,
-                                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 6.dp))
+                        val group = when (row) {
+                            SetRow.POSITION -> "Layout"
+                            SetRow.SIZE -> "Cards"
+                            SetRow.ACCENT -> "Colors & background"
+                            SetRow.HEADER -> "Information"
+                            SetRow.SETTINGS_BUTTON -> "Access & guidance"
+                            SetRow.MOTION -> "Motion"
+                            SetRow.KILL_ALL -> "Kill All"
+                            SetRow.PROTECTED_APPS -> "Protection"
+                            SetRow.EXCEPTIONS -> "App visibility"
+                            else -> null
+                        }
+                        group?.let { SettingsGroupHeading(it) }
+                        if (row == SetRow.KILL_ALL || row == SetRow.PROTECTED_APPS) {
+                            AccessInfoLabel(when (privilegedActive) {
+                                true -> "Requires Porter / Shizuku · Active"
+                                false -> "Requires Porter / Shizuku · Not active"
+                                null -> "Requires Porter / Shizuku · Checking access…"
+                            }, when (privilegedActive) { true -> Tokens.accent; false -> Color(0xFFE0B56A); null -> Tokens.textDim })
+                            Spacer(Modifier.height(8.dp))
                         }
                         val title = when (row) {
                             SetRow.POSITION -> "Selection position"
@@ -144,18 +154,22 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                             SetRow.HELP -> "Show remote-control hints along the bottom."
                             SetRow.MOTION -> "Animate focus and scrolling. Off gives immediate movement."
                             SetRow.CLOSE_SPEED -> "Normal for daily use; Slow makes the drop clearer in recordings."
-                            SetRow.HIDDEN_KILL_EXCLUSION -> "Privileged mode only. Off allows Kill All to close hidden apps; protected apps are always skipped."
-                            SetRow.EXCEPTIONS -> exceptionsSummary
+                            SetRow.HIDDEN_KILL_EXCLUSION -> "Off allows Kill All to close hidden apps; protected apps are always skipped."
+                            SetRow.EXCEPTIONS -> "$exceptionsSummary · Works in both modes"
                             SetRow.PROTECTED_APPS -> protectedSummary
                             SetRow.INDIVIDUAL_PROTECTION -> "Also protect chosen apps from DOWN and the context-menu close action."
                             SetRow.CONFIRM_KILL_ALL -> "Review before closing all apps. Off closes immediately; protected apps are still skipped."
                             SetRow.PRIVILEGED -> "When enabled, use actual tasks if authorized; otherwise use history."
                             SetRow.MANAGER -> "$managerStatus. OK opens the manager or requests access."
-                            SetRow.KILL_ALL -> "Privileged mode only. Hidden automatically in usage-history mode."
-                            SetRow.FORCE_STOP -> "Privileged mode only. Also stop the app when closing its task."
+                            SetRow.KILL_ALL -> "Hidden automatically in usage-history mode."
+                            SetRow.FORCE_STOP -> "Also stop the app when closing its task."
                             SetRow.RESET -> "Restore the preferred profile and clear app exceptions. Confirmation required."
                         }
-                        SettingRow(title, desc, focus == index) {
+                        val requiresAccess = row == SetRow.CLOSE_HINT || row == SetRow.CLOSE_SPEED ||
+                            row == SetRow.FORCE_STOP || row == SetRow.PRIVILEGED
+                        SettingRow(title, desc, focus == index,
+                            accessLabel = if (requiresAccess) "Porter / Shizuku \u00b7 " + when (privilegedActive) { true -> "Active"; false -> "Not active"; null -> "Checking access\u2026" } else null,
+                            accessColor = when (privilegedActive) { true -> Tokens.accent; false -> Color(0xFFE0B56A); null -> Tokens.textDim }) {
                             when (row) {
                                 SetRow.POSITION -> Segmented(listOf("Centered", "Side"), settings.position.ordinal)
                                 SetRow.DIRECTION -> Segmented(listOf("← Left", "Right →"), settings.direction.ordinal)
@@ -169,24 +183,24 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
                                 }
                                 SetRow.BG_DIM -> DimBar(settings.bgDim)
                                 SetRow.BG_TINT -> SwatchRow(BgTint.entries.map { it.color }, settings.bgTint.ordinal, ring = true)
-                                SetRow.HEADER -> Toggle(settings.showHeader)
-                                SetRow.SETTINGS_BUTTON -> Toggle(settings.showSettingsButton)
+                                SetRow.HEADER -> SettingsToggle(settings.showHeader)
+                                SetRow.SETTINGS_BUTTON -> SettingsToggle(settings.showSettingsButton)
                                 SetRow.APP_TEXT_POSITION -> Segmented(listOf("Under app", "Bottom"), settings.appTextPosition.ordinal)
-                                SetRow.APP_NAMES -> Toggle(settings.showAppNames)
+                                SetRow.APP_NAMES -> SettingsToggle(settings.showAppNames)
                                 SetRow.APP_DETAILS -> Segmented(listOf("Off", "Always", "Privileged only"), settings.appDetailsMode.ordinal)
                                 SetRow.CLOSE_HINT -> Segmented(listOf("Elevated", "Minimal"), settings.closeHintStyle.ordinal)
-                                SetRow.HELP -> Toggle(settings.showHelp)
-                                SetRow.MOTION -> Toggle(settings.smoothMotion)
+                                SetRow.HELP -> SettingsToggle(settings.showHelp)
+                                SetRow.MOTION -> SettingsToggle(settings.smoothMotion)
                                 SetRow.CLOSE_SPEED -> Segmented(listOf("Normal", "Slow"), settings.closeAnimationSpeed.ordinal)
-                                SetRow.PRIVILEGED -> Toggle(settings.usePrivileged)
+                                SetRow.PRIVILEGED -> SettingsToggle(settings.usePrivileged)
                                 SetRow.KILL_ALL -> Segmented(listOf("App row", "Top controls", "Hidden"), settings.killAllLocation.ordinal)
-                                SetRow.FORCE_STOP -> Toggle(settings.forceStopOnKill)
+                                SetRow.FORCE_STOP -> SettingsToggle(settings.forceStopOnKill)
                                 SetRow.RESET -> Text("Reset…", style = Type.small, color = Tokens.textDim)
-                                SetRow.HIDDEN_KILL_EXCLUSION -> Toggle(settings.excludeHiddenFromKillAll)
+                                SetRow.HIDDEN_KILL_EXCLUSION -> SettingsToggle(settings.excludeHiddenFromKillAll)
                                 SetRow.EXCEPTIONS -> Text("›", style = Type.title, color = Tokens.textDim)
                                 SetRow.PROTECTED_APPS -> Text("›", style = Type.title, color = Tokens.textDim)
-                                SetRow.INDIVIDUAL_PROTECTION -> Toggle(settings.protectIndividualCloses)
-                                SetRow.CONFIRM_KILL_ALL -> Toggle(settings.confirmKillAll)
+                                SetRow.INDIVIDUAL_PROTECTION -> SettingsToggle(settings.protectIndividualCloses)
+                                SetRow.CONFIRM_KILL_ALL -> SettingsToggle(settings.confirmKillAll)
                                 SetRow.MANAGER -> Text("↗", style = Type.row, color = Tokens.textDim)
                             }
                         }
@@ -216,7 +230,7 @@ fun ResetDefaultsDialog(confirmSelected: Boolean) {
     }
 }
 @Composable
-private fun SettingRow(title: String, desc: String, focused: Boolean, compact: Boolean = false, control: @Composable () -> Unit) {
+private fun SettingRow(title: String, desc: String, focused: Boolean, compact: Boolean = false, accessLabel: String? = null, accessColor: Color = Tokens.textDim, control: @Composable () -> Unit) {
     val accent = LocalAccent.current
     Row(
         Modifier
@@ -230,6 +244,7 @@ private fun SettingRow(title: String, desc: String, focused: Boolean, compact: B
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, style = Type.row, color = Tokens.text)
+            if (accessLabel != null) AccessInfoLabel(accessLabel, accessColor)
             Text(desc, style = Type.small, color = Tokens.textDim, modifier = Modifier.padding(top = 4.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically) { control() }
@@ -237,7 +252,7 @@ private fun SettingRow(title: String, desc: String, focused: Boolean, compact: B
 }
 
 @Composable
-private fun Toggle(on: Boolean) {
+internal fun SettingsToggle(on: Boolean) {
     val accent = LocalAccent.current
     Box(
         Modifier.size(width = 54.dp, height = 28.dp).clip(RoundedCornerShape(percent = 50))

@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -18,9 +17,9 @@ import com.websnake.recentstv.data.AppearancePreset
 import com.websnake.recentstv.ui.theme.*
 
 @Composable
-fun AppearancePresetsScreen(focus: Int, canRestore: Boolean) {
+fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boolean = true) {
     val listState = rememberLazyListState()
-    LaunchedEffect(focus) { listState.animateScrollToItem(focus) }
+    KeepFocusedItemVisible(listState, focus, smoothMotion, canRestore)
     Column(Modifier.fillMaxSize().background(Tokens.bg).padding(horizontal = 60.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Appearance presets", style = Type.title, color = Tokens.text)
@@ -31,6 +30,12 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean) {
         items(AppearancePreset.entries.size + 1) { index ->
             val preset = AppearancePreset.entries.getOrNull(index)
             val available = preset != null || canRestore
+            Column {
+            if (preset == null) {
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Tokens.line))
+                SettingsGroupHeading("Restore")
+            }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
                 .background(if (focus == index) Tokens.surface2 else Tokens.surface)
                 .border(1.dp, if (focus == index) LocalAccent.current.base else Color.Transparent, RoundedCornerShape(11.dp))
@@ -38,6 +43,7 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean) {
                 Text(preset?.title ?: "Restore previous appearance", style = Type.row, color = if (available) Tokens.text else Tokens.textDim)
                 Text(preset?.description ?: if (canRestore) "Return to the look saved before your first preset" else "Available after applying a preset",
                     style = Type.small, color = Tokens.textDim)
+            }
             }
         }
         }

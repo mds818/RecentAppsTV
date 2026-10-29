@@ -15,6 +15,18 @@ class UpdatePolicyTest {
             assertFalse(UpdatePolicy.newer(tag, "1.0.1"))
         assertFalse(UpdatePolicy.newer("v1.0.2", "1.0.1-migration"))
     }
+    @Test fun sameVersionBuildUpdatesRequireStrictlyHigherCode() {
+        assertTrue(UpdatePolicy.offer("v1.0.1", "1.0.1", 19L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 19L, 19L))
+        assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 18L, 19L))
+        assertFalse(UpdatePolicy.offer("v1.0.0", "1.0.1", 99L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.2", "1.0.1", 18L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 0L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 2100000001L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.1-beta", "1.0.1", 19L, 18L))
+        assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", null, 18L))
+        assertTrue(UpdatePolicy.offer("v1.0.2", "1.0.1", null, 18L))
+    }
     @Test fun checksumMustMatchExactFilenameAndBeUnique() {
         val hash = "a".repeat(64)
         assertEquals(hash, UpdatePolicy.checksum("$hash  RecentAppsTV-1.0.2.apk\r\n", "RecentAppsTV-1.0.2.apk"))

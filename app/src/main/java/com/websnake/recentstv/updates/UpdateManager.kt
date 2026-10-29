@@ -27,7 +27,10 @@ import java.security.MessageDigest
 
 enum class UpdatePhase { IDLE, CHECKING, CURRENT, AVAILABLE, DOWNLOADING, READY, INSTALLING, CONFIRM, ERROR }
 data class ReleaseUpdate(val version: String, val name: String, val url: String, val size: Long,
-    val digest: String?, val checksumUrl: String?)
+    val digest: String?, val checksumUrl: String?, val build: Long? = null) {
+    val label: String get() = version + (build?.let { " \u00b7 Build $it" } ?: "")
+    val identity: String get() = "$version:$build"
+}
 data class UpdateState(val phase: UpdatePhase = UpdatePhase.IDLE, val message: String = "Not checked yet",
     val release: ReleaseUpdate? = null, val progress: Int = 0)
 
@@ -53,14 +56,14 @@ object UpdateManager {
     fun onPause(activity: ComponentActivity) { if (foreground.get() === activity) foreground.clear() }
     private fun notifyIfAvailable(context: Context) {
         val release = mutable.value.release ?: return
-        if (mutable.value.phase != UpdatePhase.AVAILABLE || notifiedVersion == release.version) return
+        if (mutable.value.phase != UpdatePhase.AVAILABLE || notifiedVersion == release.identity) return
         scope.launch {
             if (!SettingsStore(context).settings.first().showUpdateNotification) return@launch
             val activity = foreground.get() ?: return@launch
             if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
-            if (notifiedVersion == release.version) return@launch
-            notifiedVersion = release.version
-            android.widget.Toast.makeText(activity, "RecentAppsTV ${release.version} is available · Settings → About → Updates", android.widget.Toast.LENGTH_LONG).show()
+            if (notifiedVersion == release.identity) return@launch
+            notifiedVersion = release.identity
+            android.widget.Toast.makeText(activity, "RecentAppsTV ${release.label} is available · Settings → About → Updates", android.widget.Toast.LENGTH_LONG).show()
         }
     }
     private fun prefs(context: Context) = context.getSharedPreferences("update_install", Context.MODE_PRIVATE)
@@ -107,10 +110,16 @@ object UpdateManager {
                     val installed = app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty()
                     require(UpdatePolicy.version(version) != null) { "The release uses an unsupported version format. View release notes instead." }
                     require(UpdatePolicy.version(installed) != null) { "This build uses a custom version. View release notes to check manually." }
-                    if (!UpdatePolicy.newer(version, installed)) return@withContext null
                     val name = "RecentAppsTV-${version.removePrefix("v")}.apk"
                     val assets = json.getJSONArray("assets")
                     val entries = (0 until assets.length()).map { assets.getJSONObject(it) }
+                    val metadataAsset = entries.singleOrNull { it.optString("name") == "update.json" }
+                    val metadata = metadataAsset?.let { JSONObject(readText(it.getString("browser_download_url"), 16 * 1024)) }
+                    val build = metadata?.let {
+                        require(it.getString("versionName") == version.removePrefix("v") && it.getString("apk") == name) { "Update metadata does not match this release." }
+                        it.getLong("versionCode").also { code -> require(code in 1..2100000000L) { "Invalid update build number." } }
+                    }
+                    if (!UpdatePolicy.offer(version, installed, build, installedCode(app))) return@withContext null
                     val asset = entries.singleOrNull { it.optString("name") == name }
                         ?: error("The latest release has no compatible APK yet.")
                     val size = asset.getLong("size")
@@ -120,10 +129,10 @@ object UpdateManager {
                     val checksum = entries.singleOrNull { it.optString("name") == "SHA256SUMS.txt" }
                         ?.getString("browser_download_url")
                     require(digest != null || checksum != null) { "The release is missing its download checksum." }
-                    ReleaseUpdate(version.removePrefix("v"), name, asset.getString("browser_download_url"), size, digest, checksum)
+                    ReleaseUpdate(version.removePrefix("v"), name, asset.getString("browser_download_url"), size, digest, checksum, build)
                 }
                 mutable.value = if (release == null) UpdateState(UpdatePhase.CURRENT, "You have the latest version")
-                    else UpdateState(UpdatePhase.AVAILABLE, "Version ${release.version} is available", release)
+                    else UpdateState(UpdatePhase.AVAILABLE, "Version ${release.label} is available", release)
                 notifyIfAvailable(app)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { mutable.value = UpdateState(UpdatePhase.ERROR, friendly(e, "Could not check for updates")) }
@@ -137,7 +146,7 @@ object UpdateManager {
         job = scope.launch {
             val file = apk(app)
             val partial = File(file.parentFile, "update.partial")
-            mutable.value = UpdateState(UpdatePhase.DOWNLOADING, "Downloading ${release.version}…", release)
+            mutable.value = UpdateState(UpdatePhase.DOWNLOADING, "Downloading ${release.label}…", release)
             try {
                 withContext(Dispatchers.IO) {
                     file.parentFile!!.mkdirs(); file.delete(); partial.delete()
@@ -155,13 +164,13 @@ object UpdateManager {
                                 require(total <= release.size) { "Download is larger than expected." }
                                 sha.update(buffer, 0, n); output.write(buffer, 0, n)
                                 val percent = (total * 100 / release.size).toInt()
-                                if (mutable.value.progress != percent) mutable.value = UpdateState(UpdatePhase.DOWNLOADING, "Downloading ${release.version}… $percent%", release, percent)
+                                if (mutable.value.progress != percent) mutable.value = UpdateState(UpdatePhase.DOWNLOADING, "Downloading ${release.label}… $percent%", release, percent)
                             }
                             require(total == release.size) { "Download was incomplete. Please retry." }
                         } }
                         require(hex(sha.digest()) == expected) { "Download checksum does not match. Please retry." }
                     } finally { connection.disconnect() }
-                    verifyArchive(app, partial, release.version)
+                    verifyArchive(app, partial, release.version, release.build)
                     verifiedHash = expected
                     require(partial.renameTo(file)) { "Could not save the downloaded APK." }
                 }
@@ -201,7 +210,7 @@ object UpdateManager {
                         while (true) { val n = input.read(buffer); if (n < 0) break; sha.update(buffer, 0, n) }
                         hex(sha.digest())
                     } == verifiedHash) { "The verified download changed. Download the update again." }
-                    val target = verifyArchive(app, file, release.version)
+                    val target = verifyArchive(app, file, release.version, release.build)
                     val installer = app.packageManager.packageInstaller
                     val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                         setAppPackageName(app.packageName)
@@ -267,7 +276,7 @@ object UpdateManager {
     }
 
     @Suppress("DEPRECATION")
-    internal fun verifyArchive(context: Context, file: File, expectedVersion: String): Long {
+    internal fun verifyArchive(context: Context, file: File, expectedVersion: String, expectedBuild: Long? = null): Long {
         val pm = context.packageManager
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
         val archive = pm.getPackageArchiveInfo(file.absolutePath, flags) ?: error("The downloaded file is not a valid APK.")
@@ -279,6 +288,7 @@ object UpdateManager {
         require(signatures.isNotEmpty() && signatures == signers(installed)) { "Signing key differs from the installed app. An in-place update is not possible." }
         val code = PackageInfoCompat.getLongVersionCode(archive)
         require(code > PackageInfoCompat.getLongVersionCode(installed)) { "This APK is not a newer build than the installed app." }
+        require(expectedBuild == null || code == expectedBuild) { "APK build does not match update metadata." }
         require(archive.versionName == expectedVersion) { "APK version does not match the release." }
         return code
     }

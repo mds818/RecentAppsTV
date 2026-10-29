@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 · Build 19 — 2026-10-29
+
+- Detect higher build numbers within the same app version using a small release metadata asset. Keep manual downloads and Android-confirmed installation, APK integrity/signature checks and optional once-per-process checking.
+- Organize Apps into App visibility, Kill All and Protection. Keep App exceptions available in both modes; show gray requirement text with green/amber information icons reflecting actual privileged access.
+- Improve settings scrolling with directional comfort zones, natural list ends and restored submenu positions. Respect Smooth motion.
+- Refine About information, use consistent update toggles, separate preset Restore, and simplify section headings.
+- Add optional Remote button setup under About.
+- Users of Build 18 must install this build manually once to enable same-version build detection. Settings are retained with the established signing key.
+
 ## 1.0.1 — 2026-10-28
 
 - Add About links and an Updates submenu: optional once-per-process startup check, optional in-app update notice, manual checking, verified downloads and Android-confirmed installation. Allow automatic installation location for adopted USB storage; actual Shield USB testing remains pending.

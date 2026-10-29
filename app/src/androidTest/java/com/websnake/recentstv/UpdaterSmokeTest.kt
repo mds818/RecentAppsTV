@@ -59,7 +59,7 @@ class UpdaterSmokeTest : Instrumentation() {
                     requireThat(field.get(UpdateManager) == null, "Disabled notification was shown")
                     runBlocking { store.toggleUpdateNotification() }
                     runOnMainSync { UpdateManager.onResume(activity as androidx.activity.ComponentActivity) }; SystemClock.sleep(1000)
-                    requireThat(field.get(UpdateManager) == "9.0.0", "Enabled notification was not delivered")
+                    requireThat(field.get(UpdateManager) == "9.0.0:null", "Enabled notification was not delivered")
                     activity.finish()
                 }
                 "disabled" -> {

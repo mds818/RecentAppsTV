@@ -3,7 +3,7 @@
 Open **Settings → About → Updates**.
 
 - **Automatic update checks**: on by default. Check the latest stable release once per app process, in the background. Reopening the recent-app overlay does not repeat the check. No periodic worker, service, or timer is installed. Off prevents the startup request; the manual button still works.
-- **Update notification**: on by default. Show a brief in-app message when a newer release is found, at most once per version per process. This does not use Android push notifications or require notification permission. Turning it off does not disable checks.
+- **Update notification**: on by default. Show a brief in-app message when a newer release is found, at most once per version/build per process. This does not use Android push notifications or require notification permission. Turning it off does not disable checks.
 - **Check for updates**: check manually. Connection failures are shown on this page and do not block the app switcher.
 - **Download update**: downloads only after selection; progress and cancellation are available. Nothing installs automatically.
 - **Install update**: Android may first require permission to install apps from this source. Return to this page and select Install again. Then select Continue installation and confirm in Android's installer. Cancellation keeps the current app.
@@ -14,7 +14,9 @@ Updates use Android's PackageInstaller with automatic installation location rath
 
 ## Release requirements
 
-Publish stable tags such as `v1.0.2`, with a higher Android version code and a universal APK named `RecentAppsTV-1.0.2.apk`. Retain the established release signing key. Include GitHub's SHA-256 asset digest or a `SHA256SUMS.txt` asset containing the exact APK filename and digest. Drafts and prereleases are excluded. Rebuilding the same version does not generate an automatic update offer; published upgrades must advance version name and version code.
+Publish stable tags such as `v1.0.2`, with a higher Android version code and a universal APK named `RecentAppsTV-1.0.2.apk`. Retain the established release signing key. Include GitHub's SHA-256 asset digest or a `SHA256SUMS.txt` asset containing the exact APK filename and digest. Drafts and prereleases are excluded. Include a small `update.json` asset with `versionName`, integer `versionCode`, and `apk` (the exact APK filename). Example: `{"versionName":"1.0.1","versionCode":19,"apk":"RecentAppsTV-1.0.1.apk"}`. A higher version code is offered even if the version name is unchanged. The downloaded APK must match both metadata fields. Older version names and equal/lower build codes are never offered. Without metadata, newer numeric version tags remain supported.
+
+Build 18 and earlier only compare version names. Users of those builds must install 1.0.1 Build 19 manually once to enable same-version build checks. Existing settings are retained when updating with the same signing key.
 
 ## Android API references
 

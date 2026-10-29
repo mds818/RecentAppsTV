@@ -6,6 +6,8 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
+**Latest download: 1.0.1 · Build 19.** Refined settings and build-aware updates. If you already use 1.0.1 Build 18, download and install this build manually once; future builds can be detected in About → Updates. Your settings are kept when updating with the same signing key.
+
 ## Updates
 
 Version 1.0.1 adds **About → Updates**, with optional startup checks and optional in-app update messages. Downloads and installation start only when you choose them. See [update settings and installation](docs/UPDATES.md).

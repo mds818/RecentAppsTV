@@ -17,7 +17,7 @@ android {
         applicationId "com.websnake.recentstv"
         minSdk (migrationBuild ? 28 : 24)
         targetSdk 34
-        versionCode 18
+        versionCode 19
         versionName (migrationBuild ? "1.0.1-migration" : "1.0.1")
         testInstrumentationRunner 'com.websnake.recentstv.InputSmokeTest'
     }

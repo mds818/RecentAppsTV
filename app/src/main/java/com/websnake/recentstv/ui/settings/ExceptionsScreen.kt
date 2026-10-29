@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -51,11 +50,11 @@ fun ExceptionsScreen(
     excludeHiddenFromKillAll: Boolean = true,
     loading: Boolean = false,
     loadError: Boolean = false,
+    smoothMotion: Boolean = true,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(focus, apps.map { it.packageName }) {
-        if (focus in apps.indices) listState.animateScrollToItem(focus)
-    }
+    KeepFocusedItemVisible(listState, if (focus in apps.indices) focus else -1, smoothMotion,
+        apps.map { it.packageName }, bottomInset = 48.dp)
 
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
         Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 48.dp)) {

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ class SettingsActivity : ComponentActivity() {
     private var appsLoadJob: kotlinx.coroutines.Job? = null
     private var appsLoadGeneration = 0
     private var managerStatus by mutableStateOf("Checking access")
+    private var managerReady by mutableStateOf<Boolean?>(null)
     private var managerLabel by mutableStateOf("Porter / Shizuku")
     private var statusJob: kotlinx.coroutines.Job? = null
 
@@ -102,12 +104,14 @@ class SettingsActivity : ComponentActivity() {
         }
 
         setContent {
+            val menuStates = rememberSaveableStateHolder()
             RecentsTheme(accent = if (colorPrompt) AccentChart.colors[chartFocus] else settings.accentColor) {
+                menuStates.SaveableStateProvider("${screen.name}:${section?.name.orEmpty()}") {
                 when (screen) {
-                    SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance)
+                    SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance, settings.smoothMotion)
                     SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings)
                     SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true)
-                    SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus) else SettingsScreen(
+                    SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus, settings.smoothMotion) else SettingsScreen(
                         settings = settings,
                         section = section!!,
                         focus = setFocus,
@@ -115,6 +119,7 @@ class SettingsActivity : ComponentActivity() {
                         protectedSummary = protectedSummary(),
                         managerName = managerLabel,
                         managerStatus = managerStatus,
+                        privilegedActive = if (settings.usePrivileged) managerReady else false,
                     )
                     SetScreen.EXCEPTIONS, SetScreen.PROTECTED -> ExceptionsScreen(
                         apps = apps,
@@ -124,8 +129,10 @@ class SettingsActivity : ComponentActivity() {
                         excludeHiddenFromKillAll = settings.excludeHiddenFromKillAll,
                         loading = appsLoading,
                         loadError = appsLoadError,
+                        smoothMotion = settings.smoothMotion,
                         focus = excFocus,
                     )
+                }
                 }
                 if (resetPrompt) com.websnake.recentstv.ui.settings.ResetDefaultsDialog(confirmReset)
                 if (colorPrompt) AccentColorChart(chartFocus)
@@ -354,6 +361,7 @@ class SettingsActivity : ComponentActivity() {
         statusJob = lifecycleScope.launch {
             while (true) {
                 val state = com.websnake.recentstv.shizuku.ShizukuManager.state()
+                managerReady = state.ready
                 managerLabel = com.websnake.recentstv.shizuku.ShizukuManager.managerName(this@SettingsActivity)
                 managerStatus = when {
                     !settings.usePrivileged -> "Disabled for this app · usage history"
