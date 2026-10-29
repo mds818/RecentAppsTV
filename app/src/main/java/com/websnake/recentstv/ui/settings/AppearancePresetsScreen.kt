@@ -20,12 +20,12 @@ import com.websnake.recentstv.ui.theme.*
 fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boolean = true) {
     val listState = rememberLazyListState()
     KeepFocusedItemVisible(listState, focus, smoothMotion, canRestore)
-    Column(Modifier.fillMaxSize().background(Tokens.bg).padding(horizontal = 60.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().background(Tokens.bg).padding(start = 60.dp, end = 60.dp, top = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Appearance presets", style = Type.title, color = Tokens.text)
-        Text("Try a look, or restore your saved appearance.", style = Type.body, color = Tokens.textDim)
+        Text("Try a look, or restore your saved appearance.", style = Type.small, color = Tokens.textDim)
         Text("↑↓ Choose · OK Review · BACK Return", style = Type.small, color = Tokens.textDim,
-            modifier = Modifier.padding(bottom = 10.dp))
+            modifier = Modifier.padding(bottom = 4.dp))
         LazyColumn(state = listState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(AppearancePreset.entries.size + 1) { index ->
             val preset = AppearancePreset.entries.getOrNull(index)
@@ -46,9 +46,11 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boole
             }
             }
         }
+        item {
+            Text("Your restore point stays saved while trying presets, even after restarting the app.",
+                style = Type.small, color = Tokens.textDim, modifier = Modifier.padding(top = 4.dp))
         }
-        Text("Your restore point stays saved while trying presets, even after restarting the app.",
-            style = Type.small, color = Tokens.textDim)
+        }
     }
 }
 

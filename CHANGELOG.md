@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 · Build 20 — 2026-10-29
+
+- Reduce menu top/bottom spacing. About and Updates share a version line and information/status line beneath their title. Remove permanent bottom information strips; preset restore guidance scrolls with content. Both update preference switches fit on entry. Preserve row sizes, remote navigation and comfort scrolling.
+- Use compact heading spacing in home, settings sections, presets and installed-app lists.
+- Remove the fixed bottom margin; show bottom information only for relevant selected options.
+
 ## 1.0.1 · Build 19 — 2026-10-29
 
 - Detect higher build numbers within the same app version using a small release metadata asset. Keep manual downloads and Android-confirmed installation, APK integrity/signature checks and optional once-per-process checking.

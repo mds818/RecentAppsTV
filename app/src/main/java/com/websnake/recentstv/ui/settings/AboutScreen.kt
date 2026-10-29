@@ -34,26 +34,18 @@ val aboutActions = listOf(AboutAction.UPDATES, AboutAction.PROJECT, AboutAction.
 val updateActions = listOf(AboutAction.CHECK, AboutAction.INSTALL, AboutAction.AUTO_CHECK, AboutAction.NOTIFY, AboutAction.RELEASES)
 
 @Composable
-fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed: Boolean, settings: com.websnake.recentstv.data.RecentsSettings, updatesOnly: Boolean = false) {
+fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed: Boolean, settings: com.websnake.recentstv.data.RecentsSettings, updatesOnly: Boolean = false, bottomNotice: String? = null) {
     val actions = if (updatesOnly) updateActions else aboutActions
     val listState = rememberLazyListState()
     KeepFocusedItemVisible(listState, focus, settings.smoothMotion, updatesOnly)
-    Column(Modifier.fillMaxSize().background(Tokens.bg).padding(horizontal = 60.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().background(Tokens.bg).padding(start = 60.dp, end = 60.dp, top = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(if (updatesOnly) "About · Updates" else "About · RecentAppsTV (Fork)", style = Type.title, color = Tokens.text)
-        Column(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(version, style = Type.small, color = Tokens.textDim)
-            if (updatesOnly) {
-                Text(update.message, style = Type.body,
-                    color = if (update.phase == UpdatePhase.ERROR) Color(0xFFFFB4AB) else LocalAccent.current.base)
-            } else {
-                Text("Switch recent apps your way. Porter / Shizuku adds actual tasks and closing controls; Usage Access works without either.",
-                    style = Type.body, color = Tokens.textDim)
-                if (update.release != null) Text(update.message, style = Type.small, color = LocalAccent.current.base)
-            }
-        }
+        Text(version, style = Type.small, color = Tokens.textDim)
+        Text(if (updatesOnly) update.message else "Porter / Shizuku adds task switching and closing. Usage Access works without either.",
+            style = Type.small,
+            color = if (!updatesOnly) Tokens.textDim else if (update.phase == UpdatePhase.ERROR) Color(0xFFFFB4AB) else LocalAccent.current.base)
         Box(Modifier.fillMaxWidth().height(1.dp).background(Tokens.line))
-        Spacer(Modifier.height(4.dp))
         Text("↑↓ Choose · OK Open · BACK Return", style = Type.small, color = Tokens.textDim)
         LazyColumn(state = listState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(actions.size) { index ->
@@ -101,7 +93,9 @@ fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed
                 }
             }
         }
-        Text(if (updatesOnly) "Downloads and installation start only when you choose them. Android controls storage placement." else "Links open in your TV browser, if one is installed.",
-            style = Type.small, color = Tokens.textDim)
+        if (!bottomNotice.isNullOrBlank()) {
+            Text(bottomNotice, style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.fillMaxWidth().background(Tokens.bg).padding(vertical = 10.dp))
+        }
     }
 }

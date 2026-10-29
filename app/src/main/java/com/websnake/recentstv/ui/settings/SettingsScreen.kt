@@ -42,10 +42,10 @@ fun SettingsHome(focus: Int, smoothMotion: Boolean = true) {
     val listState = rememberLazyListState()
     KeepFocusedItemVisible(listState, focus, smoothMotion)
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 60.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Recent Apps · Settings", style = Type.title, color = Tokens.text)
             Text("↑↓ Choose · OK Open · BACK Return", style = Type.small, color = Tokens.textDim,
-                modifier = Modifier.padding(bottom = 12.dp))
+                modifier = Modifier.padding(bottom = 6.dp))
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(SettingsMenu.reset + 1) { index ->
                     Column {
@@ -78,10 +78,10 @@ fun SettingsScreen(settings: RecentsSettings, section: SettingsSection, focus: I
     val listState = rememberLazyListState()
     KeepFocusedItemVisible(listState, focus, settings.smoothMotion, section)
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
-        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 32.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 20.dp)) {
             Text("Settings · ${section.title}", style = Type.title, color = Tokens.text)
             Text("↑↓ Choose · ←→ Adjust · OK Toggle / Open", style = Type.small, color = Tokens.textDim,
-                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp))
+                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(section.rows.size) { index ->
                     val row = section.rows[index]

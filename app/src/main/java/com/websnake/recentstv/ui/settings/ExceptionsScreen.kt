@@ -57,11 +57,11 @@ fun ExceptionsScreen(
         apps.map { it.packageName }, bottomInset = 48.dp)
 
     Box(Modifier.fillMaxSize().background(Tokens.bg)) {
-        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 48.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 60.dp, end = 60.dp, top = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("‹", style = Type.hero, color = Tokens.textDim)
+                Text("‹", style = Type.title, color = Tokens.textDim)
                 Spacer(Modifier.width(14.dp))
-                Text(if (protection) "Protected apps" else "Exceptions", style = Type.hero, color = Tokens.text)
+                Text(if (protection) "Protected apps" else "Exceptions", style = Type.title, color = Tokens.text)
             }
             Text(
                 if (protection) {
@@ -69,8 +69,8 @@ fun ExceptionsScreen(
                     else "Chosen apps are protected from Kill All. Individual closing is allowed."
                 } else if (excludeHiddenFromKillAll) "Hidden apps stay out of Recents and are skipped by Kill All. Hiding does not close them."
                 else "Hidden apps stay out of Recents. Kill All can close them unless protected. Hiding does not close them.",
-                style = Type.body, color = Tokens.textDim,
-                modifier = Modifier.padding(top = 4.dp, bottom = 22.dp),
+                style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
             )
             if (loading || loadError || apps.isEmpty()) {
                 AppListStatus(loading, loadError)

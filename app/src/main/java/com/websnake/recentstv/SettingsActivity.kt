@@ -109,8 +109,15 @@ class SettingsActivity : ComponentActivity() {
                 menuStates.SaveableStateProvider("${screen.name}:${section?.name.orEmpty()}") {
                 when (screen) {
                     SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance, settings.smoothMotion)
-                    SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings)
-                    SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true)
+                    SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, bottomNotice = if (aboutFocus > 0) "Links open in your TV browser, if one is installed." else null)
+                    SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true,
+                        bottomNotice = when (updateFocus) {
+                            1 -> "Downloads and installation start only when you choose them. Android controls storage placement."
+                            2 -> "No background timer. Reopening the overlay does not repeat the startup check."
+                            3 -> "Update messages appear inside the app; no Android notification permission is needed."
+                            4 -> "Links open in your TV browser, if one is installed."
+                            else -> null
+                        })
                     SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus, settings.smoothMotion) else SettingsScreen(
                         settings = settings,
                         section = section!!,
