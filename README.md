@@ -12,6 +12,13 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 Version 1.0.1 adds **About → Updates**, with optional startup checks and optional in-app update messages. Downloads and installation start only when you choose them. See [update settings and installation](docs/UPDATES.md).
 
+<details>
+<summary>View update settings</summary>
+
+![Update preferences in 1.0.1 Build 19](docs/images/updates-1.0.1.png)
+
+</details>
+
 ## Choose your everyday look
 
 Four presets, shown with the same selected app and background. Click a picture to view it at full size.
