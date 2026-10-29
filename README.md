@@ -43,9 +43,9 @@ Four presets, shown with the same selected app and background. Click a picture t
 
 ## See it in use
 
-https://github.com/user-attachments/assets/9a9c7e9a-e602-4108-a83d-92c89835c727
+https://github.com/user-attachments/assets/ea4bb8d2-a5ac-41e9-8fe1-509827f04b15
 
-Browse Default, Clean and Clean+, then compare Spotify closing in **Classic and Clean**. Both closing demonstrations use **Slow close animation**, shown at real playback speed. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.1/RecentAppsTV-showcase-1.0.1.mp4).
+Four looks, one chapter each: **Default → Clean → Clean+ → Classic**. Clean and Classic each show browsing followed by a Spotify close in one continuous take. Both use **Slow** close animation at real playback speed. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.1/RecentAppsTV-showcase-1.0.1.mp4).
 
 Presets are starting points. Mix and match the settings afterward. Your previous appearance is saved when you first apply a preset and stays available through further preset changes and app restarts. **Restore previous appearance** brings it back. App lists and service/closing preferences are kept when applying presets.
 
