@@ -58,6 +58,12 @@ Four looks, one chapter each: **Default → Clean+ → Clean → Classic**. Clea
 
 Presets are starting points. Mix and match the settings afterward. Your previous appearance is saved when you first apply a preset and stays available through further preset changes and app restarts. **Restore previous appearance** brings it back. App lists and service/closing preferences are kept when applying presets.
 
+## Usage & settings tour
+
+https://github.com/user-attachments/assets/4702893b-2990-42bd-8110-215273ae8709
+
+One minute of everyday use and customization: Usage Access without Porter, UP twice to open hidden Settings, card shape and padding, the color chart, optional Porter access, a task closing with **Slow** animation at real speed, and a protected app staying open after Kill All.
+
 ## Works without Porter or Shizuku
 
 Porter/Shizuku is **optional**. Everyday app browsing and launching can use Android's Usage Access permission, without root, USB debugging or wireless debugging.
