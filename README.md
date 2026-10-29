@@ -15,7 +15,7 @@ Version 1.0.1 adds **About → Updates**, with optional startup checks and optio
 <details>
 <summary>View update settings</summary>
 
-![Update preferences in 1.0.1 Build 19](docs/images/updates-1.0.1.png)
+![Update preferences in 1.0.1 Build 20](docs/images/updates-1.0.1.png)
 
 </details>
 
