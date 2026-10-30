@@ -23,6 +23,10 @@ object UpdatePolicy {
             else remoteCode in 1..2100000000L && remoteCode > installedCode
     }
 
+    /** Explain a newer release whose APK cannot advance the installed build. */
+    fun buildConflict(remote: String, installed: String, remoteCode: Long?, installedCode: Long): Boolean =
+        newer(remote, installed) && remoteCode != null && remoteCode in 1..2100000000L && remoteCode <= installedCode
+
     fun checksum(text: String, filename: String): String? = text.lineSequence().mapNotNull { line ->
         val match = Regex("^([a-fA-F0-9]{64})\\s+\\*?(.+?)\\s*$").matchEntire(line) ?: return@mapNotNull null
         if (match.groupValues[2] == filename) match.groupValues[1].lowercase() else null

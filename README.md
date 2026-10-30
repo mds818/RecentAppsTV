@@ -6,7 +6,7 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
-**Latest download: 1.1.2 · Build 52.** Faster privileged app handoffs, smoother view switching and quicker returns from Settings through bounded icon reuse and fewer unnecessary redraws. All the configurable actions and saved profiles from 1.1.0 remain available. Updates signed with the same key keep your settings.
+**Latest download: 1.1.2 · Build 53.** Faster privileged app handoffs, smoother view switching and quicker returns from Settings through bounded icon reuse and fewer unnecessary redraws. All the configurable actions and saved profiles from 1.1.0 remain available. Updates signed with the same key keep your settings.
 
 ## Updates
 

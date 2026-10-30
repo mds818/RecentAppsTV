@@ -1,4 +1,6 @@
-# 1.1.2 · Build 52
+# 1.1.2 · Build 53
+
+- Advance the release build number so build 52 installations can update; explain newer releases with non-advancing build numbers instead of reporting current.
 
 - Use the correct shell caller identity for direct task switching; use the existing Android launch Intent when switching is unavailable.
 - Reuse up to 2 MiB of rendered icon pixels, clear under memory pressure, and avoid rebuilding unchanged overlay items for menus.

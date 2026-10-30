@@ -119,7 +119,11 @@ object UpdateManager {
                         require(it.getString("versionName") == version.removePrefix("v") && it.getString("apk") == name) { "Update metadata does not match this release." }
                         it.getLong("versionCode").also { code -> require(code in 1..2100000000L) { "Invalid update build number." } }
                     }
-                    if (!UpdatePolicy.offer(version, installed, build, installedCode(app))) return@withContext null
+                    val localBuild = installedCode(app)
+                    require(!UpdatePolicy.buildConflict(version, installed, build, localBuild)) {
+                        "Release ${version.removePrefix("v")} is newer, but its build $build is not higher than installed build $localBuild. Open Release notes to check manually."
+                    }
+                    if (!UpdatePolicy.offer(version, installed, build, localBuild)) return@withContext null
                     val asset = entries.singleOrNull { it.optString("name") == name }
                         ?: error("The latest release has no compatible APK yet.")
                     val size = asset.getLong("size")
