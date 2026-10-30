@@ -53,12 +53,8 @@ fun ContextMenu(task: RecentTask, selected: Int, canManageTasks: Boolean = true,
         ) {
             // app header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val painter = remember(task.packageName) {
-                    task.icon?.let {
-                        val w = it.intrinsicWidth.takeIf { v -> v > 0 } ?: 96
-                        val h = it.intrinsicHeight.takeIf { v -> v > 0 } ?: 96
-                        BitmapPainter(it.toBitmap(w, h).asImageBitmap())
-                    }
+                val painter = remember(task.packageName, task.icon) {
+                    task.icon?.let { drawablePainter(it) }
                 }
                 if (painter != null) {
                     Box(Modifier.size(if (allowRestore) 40.dp else 44.dp).clip(RoundedCornerShape(11.dp)).background(Tokens.card), Alignment.Center) {

@@ -152,7 +152,7 @@ fun RecentsOverlay(
     val focusedTask = if (!topFocused && dismissing == null)
         (items.getOrNull(focus) as? OverlayItem.Card)?.task else null
     val rowReveal = animateFloatAsState(if (rowVisible) 1f else 0f,
-        tween(if (smoothMotion) animationSpeed.duration(if (rowVisible) 260 else 170) else 0, easing = FastOutSlowInEasing), label = "view-row")
+        tween(if (smoothMotion) animationSpeed.duration(if (rowVisible) VIEW_ENTER_MS else VIEW_EXIT_MS) else 0, easing = FastOutSlowInEasing), label = "view-row")
     val switchSelected = !topFocused && items.getOrNull(focus) is OverlayItem.ViewSwitch
     val killSelected = !topFocused && items.getOrNull(focus) == OverlayItem.KillAll
 
@@ -505,7 +505,7 @@ private fun AppCard(
                 .then(if (focused) Modifier.border(2.5.dp, accent.base, shape.shape(size.dp)) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
-            val painter = remember(task.packageName) { task.icon?.let { drawablePainter(it) } }
+            val painter = remember(task.packageName, task.icon) { task.icon?.let { drawablePainter(it) } }
             if (painter != null) {
                 Image(
                     painter = painter, contentDescription = task.label,
@@ -581,13 +581,10 @@ private fun KillAllTile(
 /** Rasterise any Drawable into a Compose painter, downscaled to ~display size so
  *  we don't upload a 432px adaptive-icon texture to draw a ~120px tile. */
 internal fun drawablePainter(d: android.graphics.drawable.Drawable): Painter {
-    val cap = 160
-    val iw = d.intrinsicWidth.takeIf { it > 0 } ?: cap
-    val ih = d.intrinsicHeight.takeIf { it > 0 } ?: cap
-    val s = minOf(1f, cap.toFloat() / maxOf(iw, ih))
-    val w = (iw * s).toInt().coerceAtLeast(1)
-    val h = (ih * s).toInt().coerceAtLeast(1)
-    return BitmapPainter(d.toBitmap(w, h).asImageBitmap())
+    val trace = com.websnake.recentstv.data.LoadTrace.begin("raster")
+    val painter = BitmapPainter(IconBitmaps.get(d).asImageBitmap())
+    trace?.mark("ready")
+    return painter
 }
 
 
@@ -668,3 +665,6 @@ fun RestoreDismissedConfirmation(confirm: Boolean, count: Int, apps: List<Previe
         }
     }
 }
+
+internal const val VIEW_EXIT_MS = 100
+internal const val VIEW_ENTER_MS = 180

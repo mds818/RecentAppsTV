@@ -102,7 +102,7 @@ class RecentsActivity : ComponentActivity() {
     private var topKillFocused by mutableStateOf(false)
     private var settingsHintVisible by mutableStateOf(false)
     private var settingsHintJob: kotlinx.coroutines.Job? = null
-    private var loadedSource = AppListSource.NEEDS_ACCESS
+    private var loadedSource by mutableStateOf(AppListSource.NEEDS_ACCESS)
     private var privileged by mutableStateOf(false)
     private var ctxTask by mutableStateOf<RecentTask?>(null) // long-press context menu target
     private var ctxSelected by mutableIntStateOf(0)
@@ -113,7 +113,14 @@ class RecentsActivity : ComponentActivity() {
     private var pendingLocalDismiss = false
     private var busy = false                                  // guards async transitions
 
+    private var resumeTrace: com.websnake.recentstv.data.LoadTrace? = null
+    private var contextCloseTrace: com.websnake.recentstv.data.LoadTrace? = null
+    private var switchTrace: com.websnake.recentstv.data.LoadTrace? = null
+    private var contextTrace: com.websnake.recentstv.data.LoadTrace? = null
+    private var launchTrace: com.websnake.recentstv.data.LoadTrace? = null
     private val openTrace = com.websnake.recentstv.data.LoadTrace.begin("open")
+    private var returningFromSettings = false
+    private var resumeSequence by mutableIntStateOf(0)
     private var reloadJob: kotlinx.coroutines.Job? = null
     private var actionJob: kotlinx.coroutines.Job? = null
 
@@ -129,6 +136,7 @@ class RecentsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.websnake.recentstv.updates.UpdateManager.checkOnce(applicationContext)
+        com.websnake.recentstv.ui.overlay.IconBitmaps.initialize(applicationContext)
         repo = RecentTasksRepository(applicationContext)
         store = SettingsStore(applicationContext)
         ShizukuManager.addPermissionListener(permListener)
@@ -141,6 +149,16 @@ class RecentsActivity : ComponentActivity() {
                     androidx.compose.runtime.LaunchedEffect(Unit) {
                         androidx.compose.runtime.withFrameNanos { }
                         openTrace.mark("visible")
+                    }
+                }
+                if (openTrace != null) {
+                    androidx.compose.runtime.LaunchedEffect(scene, rowVisible, viewRevision, ctxTask != null, resumeSequence) {
+                        androidx.compose.runtime.withFrameNanos { }
+                        if (scene == Scene.OVERLAY) {
+                            if (ctxTask != null) contextTrace?.mark("visible")
+                            else { contextTrace?.mark("closed"); contextTrace = null; contextCloseTrace?.mark("visible"); contextCloseTrace = null }
+                            if (rowVisible) { switchTrace?.mark("visible"); switchTrace = null; resumeTrace?.mark("visible"); resumeTrace = null }
+                        }
                     }
                 }
                 val scrimColor = settings.bgTint.color
@@ -221,12 +239,16 @@ class RecentsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        resumeTrace = com.websnake.recentstv.data.LoadTrace.begin("resume")
+        if (resumeTrace != null) resumeSequence++
         com.websnake.recentstv.updates.UpdateManager.onResume(this)
         temporaryListMode = null
         edgeMenuOpen = false; restorePrompt = false; restorePreviewJob?.cancel()
         clearEdgeArm()
         viewNoticeJob?.cancel(); viewNoticeVisible = false; viewNotice = null
-        reload()
+        val keepVisible = returningFromSettings && scene == Scene.OVERLAY && tasks.isNotEmpty()
+        returningFromSettings = false
+        reload(keepVisible = keepVisible)
         permissionWatch?.cancel()
         permissionWatch = lifecycleScope.launch {
             while (true) {
@@ -241,6 +263,7 @@ class RecentsActivity : ComponentActivity() {
     private var permissionWatch: kotlinx.coroutines.Job? = null
 
     override fun onPause() {
+        launchTrace?.mark("paused")
         clearEdgeArm()
         viewNoticeJob?.cancel(); viewNoticeVisible = false; viewNotice = null
         com.websnake.recentstv.updates.UpdateManager.onPause(this)
@@ -268,14 +291,18 @@ class RecentsActivity : ComponentActivity() {
     // ── load / scene routing ───────────────────────────────────────────────
     private var bulkTasks: List<RecentTask> = emptyList()
 
-    private fun reload(origin: SwitchOrigin? = null, anchor: RowSwitchPosition? = null, restoring: Boolean = false) {
+    private fun reload(origin: SwitchOrigin? = null, anchor: RowSwitchPosition? = null, restoring: Boolean = false, keepVisible: Boolean = false) {
         val oldPackages = tasks.mapTo(HashSet()) { it.packageName }
-        val previousPackage = if (origin != null || restoring) taskAt(focus)?.packageName else null
-        val inPlace = (origin != null || restoring) && scene == Scene.OVERLAY
+        val previousPackage = if (origin != null || restoring || keepVisible) taskAt(focus)?.packageName else null
+        val inPlace = (origin != null || restoring || keepVisible) && scene == Scene.OVERLAY
         val startedAt = android.os.SystemClock.elapsedRealtime()
         val loadTrace = com.websnake.recentstv.data.LoadTrace.begin("reload")
         if (!inPlace) { bulkTasks = emptyList(); scene = Scene.LOADING; rowVisible = true }
-        else { busy = true; rowVisible = restoring || !settings.smoothMotion }
+        else {
+            busy = true
+            rowVisible = restoring || keepVisible || !settings.smoothMotion
+            if (keepVisible) { gearFocused = false; topKillFocused = false; restoreFocused = false; viewFocused = false }
+        }
         clearEdgeArm()
         clearSettingsHint()
         killPrompt = false
@@ -311,13 +338,14 @@ class RecentsActivity : ComponentActivity() {
                 val entries = if (history) runCatching { repo.getRecentApps(refreshed.exceptions, foreground) }.getOrDefault(emptyList()).map { entry ->
                     entry.copy(matchedTaskId = actual.firstOrNull { it.packageName == entry.packageName }?.taskId)
                 } else actual
+                com.websnake.recentstv.ui.overlay.IconBitmaps.prepare(entries.mapNotNull { it.icon })
                 loadTrace?.mark("enrichment-end")
                 Triple(actual, entries, refreshed)
             }
             val currentAccess = repo.ready()
             if (hadAccess != currentAccess || ListSourcePolicy.resolve(temporaryListMode ?: settings.listMode, currentAccess, repo.hasUsageAccess()) != source) { reload(); return@launch }
-            if (inPlace && !restoring && settings.smoothMotion) {
-                val remaining = settings.animationSpeed.duration(170).toLong() - (android.os.SystemClock.elapsedRealtime() - startedAt)
+            if (inPlace && !restoring && !keepVisible && settings.smoothMotion) {
+                val remaining = settings.animationSpeed.duration(com.websnake.recentstv.ui.overlay.VIEW_EXIT_MS).toLong() - (android.os.SystemClock.elapsedRealtime() - startedAt)
                 if (remaining > 0) delay(remaining)
             }
             settings = loaded.third; privileged = hadAccess; loadedSource = source; bulkTasks = loaded.first
@@ -335,7 +363,7 @@ class RecentsActivity : ComponentActivity() {
             viewFocused = origin == SwitchOrigin.TOP && hasViewSwitch()
             if (tasks.isEmpty()) showEmptyView() else {
                 scene = Scene.OVERLAY
-                val retained = if (origin == SwitchOrigin.TOP || restoring) buildItems().indexOfFirst { it is OverlayItem.Card && it.task.packageName == previousPackage } else -1
+                val retained = if (origin == SwitchOrigin.TOP || restoring || keepVisible) buildItems().indexOfFirst { it is OverlayItem.Card && it.task.packageName == previousPackage } else -1
                 focus = if (retained >= 0) retained else defaultFocus()
             }
             if (origin == SwitchOrigin.ROW && hasRowSwitch()) { viewFocused = false; focus = buildItems().indexOfFirst { it is OverlayItem.ViewSwitch && it.side == (anchor ?: RowSwitchPosition.START) }.coerceAtLeast(0) }
@@ -353,7 +381,11 @@ class RecentsActivity : ComponentActivity() {
         }
     }
 
-    private fun buildItems(): List<OverlayItem> {
+    private val overlayItems by androidx.compose.runtime.derivedStateOf {
+        createItems()
+    }
+    private fun buildItems(): List<OverlayItem> = overlayItems
+    private fun createItems(): List<OverlayItem> {
         val list = ArrayList<OverlayItem>()
         if (hasBulkAction() && settings.killAllLocation.inRow) list.add(OverlayItem.KillAll)
         tasks.forEach { list.add(OverlayItem.Card(it)) }
@@ -371,6 +403,7 @@ class RecentsActivity : ComponentActivity() {
 
     // ── key handling ────────────────────────────────────────────────────────
     private fun openSettings() {
+        returningFromSettings = true
         clearSettingsHint()
         startActivity(Intent(this, SettingsActivity::class.java))
     }
@@ -445,7 +478,7 @@ class RecentsActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
                 clearSettingsHint()
                 cancelCenterPress()
-                if (ctxTask != null) ctxTask = null
+                if (ctxTask != null) { contextCloseTrace = com.websnake.recentstv.data.LoadTrace.begin("context-close"); ctxTask = null }
                 else if (gearFocused || topKillFocused || viewFocused || restoreFocused) { gearFocused = false; restoreFocused = false; topKillFocused = false; viewFocused = false }
                 else finish()
                 return true
@@ -556,6 +589,7 @@ class RecentsActivity : ComponentActivity() {
         longPressFired = true
         peekDir = -1
         ctxSelected = contextActions(task).first()
+        contextTrace = com.websnake.recentstv.data.LoadTrace.begin("context-menu")
         ctxTask = task
     }
 
@@ -775,6 +809,7 @@ class RecentsActivity : ComponentActivity() {
             android.widget.Toast.makeText(this, "Usage Access is needed for Recent apps", android.widget.Toast.LENGTH_SHORT).show()
             openUsageAccess(); return
         }
+        switchTrace = com.websnake.recentstv.data.LoadTrace.begin("view-switch")
         temporaryListMode = target
         cancelCenterPress()
         clearSettingsHint()
@@ -919,6 +954,7 @@ class RecentsActivity : ComponentActivity() {
 
     private fun switchTo(task: RecentTask) {
         if (busy) return
+        launchTrace = com.websnake.recentstv.data.LoadTrace.begin("app-launch")
         busy = true
         actionJob = lifecycleScope.launch {
             val moved = withContext(Dispatchers.IO) { repo.switchTo(taskForAction(task) ?: task) }
@@ -935,7 +971,9 @@ class RecentsActivity : ComponentActivity() {
                 android.widget.Toast.makeText(this@RecentsActivity, "Unable to open this app", android.widget.Toast.LENGTH_SHORT).show()
                 return@launch
             }
+            launchTrace?.mark("accepted")
             delay(120)
+            launchTrace?.mark("finish")
             finish()                                   // reveal the now-foregrounded app
         }
     }

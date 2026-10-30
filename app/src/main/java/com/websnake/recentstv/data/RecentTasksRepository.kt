@@ -196,6 +196,7 @@ class RecentTasksRepository(private val context: Context) {
     /** Bring an existing task to the front. Returns false → caller should launch via intent. */
     fun switchTo(task: RecentTask): Boolean {
         if (task.isUsageEntry || !ready()) return false
+        val moveTrace = LoadTrace.begin("task-move")
         // reflection moveTaskToFront(IApplicationThread, String, int taskId, int flags, Bundle)
         // — a null caller/options works for a privileged binder. Signatures vary across
         // ROMs, so resolve dynamically: taskId goes in the first int slot, 0 in any other.
@@ -204,19 +205,15 @@ class RecentTasksRepository(private val context: Context) {
             val m = atm.javaClass.methods.firstOrNull {
                 it.name == "moveTaskToFront" && it.parameterTypes.any { p -> p == Int::class.javaPrimitiveType }
             } ?: return@runCatching false
-            var firstInt = true
-            val args = m.parameterTypes.map { p ->
-                if (p == Int::class.javaPrimitiveType) (if (firstInt) task.taskId else 0).also { firstInt = false }
-                else nullFor(p)
-            }.toTypedArray()
+            val args = TaskMoveArguments.create(m.parameterTypes, task.taskId, Shizuku.getUid())
             m.invoke(atm, *args)
             true
         }.getOrDefault(false)
-        if (moved) return true
-        // shell fallback: monkey-launch by package (resumes existing task in most cases)
-        val ok = execShell("monkey -p ${task.packageName} -c android.intent.category.LEANBACK_LAUNCHER 1")
-            .contains("Events injected")
-        return ok
+        if (moved) { moveTrace?.mark("binder-success"); return true }
+        moveTrace?.mark("binder-failed")
+        // Activity uses the ordinary launch intent if direct task switching is unavailable.
+        // Spawning shell monkey duplicates that fallback and delays foreground handoff.
+        return false
     }
 
     /** Remove a recent entry. Apps can own SEVERAL tasks, so remove every task

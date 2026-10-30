@@ -1,3 +1,10 @@
+# 1.1.2 · Build 52
+
+- Use the correct shell caller identity for direct task switching; use the existing Android launch Intent when switching is unavailable.
+- Reuse up to 2 MiB of rendered icon pixels, clear under memory pressure, and avoid rebuilding unchanged overlay items for menus.
+- Keep the app row visible during refresh after Settings and shorten the view-switch transition.
+- Add task-move argument regression tests.
+
 # 1.1.1 · Build 51
 
 - Improve repeated overlay opening by avoiding redundant loads and reducing UsageStats and PackageManager work.
