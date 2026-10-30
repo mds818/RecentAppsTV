@@ -1,3 +1,17 @@
+# 1.1.1 · Build 51
+
+- Improve repeated overlay opening by avoiding redundant loads and reducing UsageStats and PackageManager work.
+- Keep fresh foreground-event queries, permission invalidation and clock/expiry handling; actual Android tasks remain uncached.
+- Reduce unchanged settings transactions and unnecessary dismissal-history refreshes.
+- Measured repeated openings were 27–30% faster in a small Xiaomi TV test. Cold-start results varied; see docs/PERFORMANCE.md.
+
+## Local Build 50
+
+- Reduce duplicate overlay loads and repeated history/PackageManager work.
+- Query fresh incremental foreground events between bounded full reconciliations; preserve permission and clock-change handling.
+- Avoid history refresh where dismissal does not apply and skip unchanged marker transactions.
+- Add cache regression tests and opt-in stage timings. See docs/PERFORMANCE.md for local measurements.
+
 # 1.1.0 · Build 49
 
 - Choose recent application history or Android tasks, with configurable view switching.

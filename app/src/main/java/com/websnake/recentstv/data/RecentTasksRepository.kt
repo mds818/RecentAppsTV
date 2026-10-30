@@ -25,7 +25,10 @@ import java.lang.reflect.Method
  */
 class RecentTasksRepository(private val context: Context) {
 
-    private companion object { const val MAX_TASKS = 12 }
+    private companion object {
+        const val MAX_TASKS = 12
+        val usageHistory = ForegroundUsageCache(java.util.concurrent.TimeUnit.DAYS.toMillis(7))
+    }
 
     private val pkgRepo = PackageRepository(context)
     private val ownPackage = context.packageName
@@ -65,34 +68,37 @@ class RecentTasksRepository(private val context: Context) {
         context.getSystemService(android.app.AppOpsManager::class.java)
             .checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
                 android.os.Process.myUid(), ownPackage) == android.app.AppOpsManager.MODE_ALLOWED
-    }.getOrDefault(false)
+    }.getOrDefault(false).also { if (!it) usageHistory.invalidate() }
 
     fun getForegroundUsage(): Map<String, Long> {
         if (!hasUsageAccess()) return emptyMap()
         val end = System.currentTimeMillis()
-        val begin = end - java.util.concurrent.TimeUnit.DAYS.toMillis(7)
-        val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
-        val lastForeground = HashMap<String, Long>()
-        val events = usage.queryEvents(begin, end) ?: return emptyMap()
-        val event = android.app.usage.UsageEvents.Event()
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                val pkg = event.packageName ?: continue
-                lastForeground[pkg] = maxOf(lastForeground[pkg] ?: 0L, event.timeStamp)
+        return usageHistory.read(end, android.os.SystemClock.elapsedRealtime()) { begin, until ->
+            val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
+            val lastForeground = HashMap<String, Long>()
+            val events = usage.queryEvents(begin, until)
+            if (events != null) {
+                val event = android.app.usage.UsageEvents.Event()
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(event)
+                    if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                        val pkg = event.packageName ?: continue
+                        lastForeground[pkg] = maxOf(lastForeground[pkg] ?: 0L, event.timeStamp)
+                    }
+                }
             }
+            lastForeground
         }
-        return lastForeground
     }
     fun getRecentApps(exceptions: Set<String>, lastForeground: Map<String, Long> = getForegroundUsage()): List<RecentTask> {
         if (!hasUsageAccess()) return emptyList()
         return lastForeground.entries.asSequence()
+            .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .filter { (pkg, _) ->
                 pkg !in skipPackages && pkg !in exceptions && !isHome(pkg) && pkgRepo.isUsable(pkg) &&
                     (context.packageManager.getLeanbackLaunchIntentForPackage(pkg)
                         ?: context.packageManager.getLaunchIntentForPackage(pkg)) != null
             }
-            .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .take(MAX_TASKS)
             .mapIndexed { i, entry -> RecentTask(-i - 1, entry.key, pkgRepo.label(entry.key),
                 pkgRepo.icon(entry.key), pkgRepo.category(entry.key), true) }
@@ -107,7 +113,7 @@ class RecentTasksRepository(private val context: Context) {
         // run as shell and see every task — use them as the source of truth.
         val raw = runCatching { readViaShell() }.getOrDefault(emptyList())
         Log.i("RecentsRepo", "read ${raw.size} tasks via shell")
-        return raw
+        return raw.asSequence()
             .filter { (taskId, pkg) ->
                 taskId > 0 && pkg.isNotBlank() && pkg !in skipPackages && !isHome(pkg) &&
                     pkg !in exceptions && pkgRepo.isUsable(pkg)   // drop disabled/uninstalled
@@ -122,7 +128,7 @@ class RecentTasksRepository(private val context: Context) {
                     icon = pkgRepo.icon(pkg),
                     category = pkgRepo.category(pkg),
                 )
-            }
+            }.toList()
     }
 
     /** Primary read path: privileged IActivityTaskManager.getRecentTasks. */

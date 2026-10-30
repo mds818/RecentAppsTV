@@ -113,17 +113,18 @@ class RecentsActivity : ComponentActivity() {
     private var pendingLocalDismiss = false
     private var busy = false                                  // guards async transitions
 
+    private val openTrace = com.websnake.recentstv.data.LoadTrace.begin("open")
     private var reloadJob: kotlinx.coroutines.Job? = null
     private var actionJob: kotlinx.coroutines.Job? = null
 
-    private val permListener = Shizuku.OnRequestPermissionResultListener { _, _ -> runOnUiThread { reload() } }
-    // Shizuku's binder attaches asynchronously after process start; re-resolve the
-    // scene the moment it arrives — but only while still waiting, so it doesn't
-    // double the recents read on a warm open (onResume already reloaded).
-    private val binderReceived = Shizuku.OnBinderReceivedListener {
-        runOnUiThread { reload() }
+    // onResume already loads the list. During a load, the final access check handles
+    // binder changes; restarting here would duplicate blocking queries on cold/warm opens.
+    private fun reloadForAccessChange() {
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && scene != Scene.LOADING) reload()
     }
-    private val binderDead = Shizuku.OnBinderDeadListener { runOnUiThread { privileged = false; reload() } }
+    private val permListener = Shizuku.OnRequestPermissionResultListener { _, _ -> runOnUiThread { reloadForAccessChange() } }
+    private val binderReceived = Shizuku.OnBinderReceivedListener { runOnUiThread { reloadForAccessChange() } }
+    private val binderDead = Shizuku.OnBinderDeadListener { runOnUiThread { privileged = false; reloadForAccessChange() } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,6 +137,12 @@ class RecentsActivity : ComponentActivity() {
 
         setContent {
             RecentsTheme(accent = settings.accentColor) {
+                if (scene == Scene.OVERLAY && openTrace != null) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        androidx.compose.runtime.withFrameNanos { }
+                        openTrace.mark("visible")
+                    }
+                }
                 val scrimColor = settings.bgTint.color
                 val scrimAlpha = settings.bgDim / 100f
                 when (scene) {
@@ -266,6 +273,7 @@ class RecentsActivity : ComponentActivity() {
         val previousPackage = if (origin != null || restoring) taskAt(focus)?.packageName else null
         val inPlace = (origin != null || restoring) && scene == Scene.OVERLAY
         val startedAt = android.os.SystemClock.elapsedRealtime()
+        val loadTrace = com.websnake.recentstv.data.LoadTrace.begin("reload")
         if (!inPlace) { bulkTasks = emptyList(); scene = Scene.LOADING; rowVisible = true }
         else { busy = true; rowVisible = restoring || !settings.smoothMotion }
         clearEdgeArm()
@@ -276,6 +284,7 @@ class RecentsActivity : ComponentActivity() {
         reloadJob?.cancel()
         reloadJob = lifecycleScope.launch {
             settings = withContext(Dispatchers.IO) { store.settings.first() }
+            loadTrace?.mark("settings")
             repo.privilegedEnabled = settings.usePrivileged
             val hadAccess = repo.ready()
             if (!inPlace) { privileged = hadAccess; restoreFocused = false; topKillFocused = false; viewFocused = false }
@@ -288,17 +297,25 @@ class RecentsActivity : ComponentActivity() {
             }
             val history = source == AppListSource.HISTORY
             val loaded = withContext(Dispatchers.IO) {
+                loadTrace?.mark("tasks-start")
                 val actual = if (hadAccess) repo.getRecentTasks(emptySet()) else emptyList()
-                val foreground = if (history || (settings.enableDismiss && settings.dismissedApps.isNotEmpty()))
+                loadTrace?.mark("tasks-end")
+                val refreshDismissal = settings.enableDismiss && DismissPolicy.applies(settings.dismissScope, source) && settings.dismissedApps.isNotEmpty()
+                val foreground = if (history || refreshDismissal)
                     runCatching { repo.getForegroundUsage() }.getOrDefault(emptyMap()) else emptyMap()
-                if (settings.enableDismiss && settings.dismissedApps.isNotEmpty()) store.refreshDismissed(foreground)
-                val refreshed = store.settings.first()
+                loadTrace?.mark("history-end")
+                val refreshed = if (refreshDismissal && DismissPolicy.remaining(settings.dismissedApps, foreground) != settings.dismissedApps) {
+                    store.refreshDismissed(foreground)
+                    store.settings.first()
+                } else settings
                 val entries = if (history) runCatching { repo.getRecentApps(refreshed.exceptions, foreground) }.getOrDefault(emptyList()).map { entry ->
                     entry.copy(matchedTaskId = actual.firstOrNull { it.packageName == entry.packageName }?.taskId)
                 } else actual
+                loadTrace?.mark("enrichment-end")
                 Triple(actual, entries, refreshed)
             }
-            if (hadAccess != repo.ready() || ListSourcePolicy.resolve(temporaryListMode ?: settings.listMode, repo.ready(), repo.hasUsageAccess()) != source) { reload(); return@launch }
+            val currentAccess = repo.ready()
+            if (hadAccess != currentAccess || ListSourcePolicy.resolve(temporaryListMode ?: settings.listMode, currentAccess, repo.hasUsageAccess()) != source) { reload(); return@launch }
             if (inPlace && !restoring && settings.smoothMotion) {
                 val remaining = settings.animationSpeed.duration(170).toLong() - (android.os.SystemClock.elapsedRealtime() - startedAt)
                 if (remaining > 0) delay(remaining)
@@ -325,6 +342,7 @@ class RecentsActivity : ComponentActivity() {
             if (origin == SwitchOrigin.EDGE) { viewFocused = false; focus = ViewSwitchPolicy.edgeIndex(itemCount(), anchor ?: settings.rowSwitchPosition) }
             if (origin != null || (restoring && oldPackages.isEmpty())) viewRevision++
             rowVisible = true
+            loadTrace?.mark("ready")
             if (restoredPackages.isNotEmpty()) restoreArrivalJob = lifecycleScope.launch { delay(settings.animationSpeed.duration(300).toLong() + 150L); restoredPackages = emptySet() }
             if (origin != null && settings.viewNoticeStyle != com.websnake.recentstv.data.ViewNoticeStyle.OFF) {
                 viewNoticeJob?.cancel()
