@@ -6,7 +6,7 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
-**Latest download: 1.1.0 · Build 48.** Recent apps or Android tasks, configurable close/dismiss actions, saved profiles with JSON import/export, and refined remote navigation. Updates signed with the same key keep your settings.
+**Latest download: 1.1.0 · Build 49.** Recent apps or Android tasks, configurable close/dismiss actions, saved profiles with JSON import/export, and refined remote navigation. Updates signed with the same key keep your settings.
 
 ## Updates
 

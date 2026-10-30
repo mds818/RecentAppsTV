@@ -1,4 +1,4 @@
-# 1.1.0 · Build 48
+# 1.1.0 · Build 49
 
 - Choose recent application history or Android tasks, with configurable view switching.
 - Configure individual and bulk close/dismiss actions separately for privileged and fallback use; restore dismissed apps.

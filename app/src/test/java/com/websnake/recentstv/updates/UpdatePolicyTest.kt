@@ -16,6 +16,9 @@ class UpdatePolicyTest {
         assertFalse(UpdatePolicy.newer("v1.0.2", "1.0.1-migration"))
     }
     @Test fun sameVersionBuildUpdatesRequireStrictlyHigherCode() {
+        assertFalse(UpdatePolicy.offer("v1.1.0", "1.0.1", 48L, 48L))
+        assertTrue(UpdatePolicy.offer("v1.1.0", "1.0.1", 49L, 48L))
+        assertTrue(UpdatePolicy.offer("v1.1.0", "1.1.0", 49L, 48L))
         assertTrue(UpdatePolicy.offer("v1.0.1", "1.0.1", 19L, 18L))
         assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 19L, 19L))
         assertFalse(UpdatePolicy.offer("v1.0.1", "1.0.1", 18L, 19L))
