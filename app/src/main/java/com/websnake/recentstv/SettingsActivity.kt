@@ -29,6 +29,7 @@ import com.websnake.recentstv.updates.UpdatePhase
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.websnake.recentstv.ui.settings.ExceptionsScreen
 import com.websnake.recentstv.ui.settings.SetRow
+import com.websnake.recentstv.ui.settings.SettingsSubmenu
 import com.websnake.recentstv.ui.settings.SettingsScreen
 import com.websnake.recentstv.ui.settings.SettingsHome
 import com.websnake.recentstv.ui.settings.SettingsSection
@@ -44,7 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class SetScreen { SETTINGS, EXCEPTIONS, PROTECTED, PRESETS, ABOUT, UPDATES }
+private enum class SetScreen { SETTINGS, EXCEPTIONS, PROTECTED, PRESETS, ABOUT, UPDATES, SUBMENU }
 
 class SettingsActivity : ComponentActivity() {
 
@@ -54,6 +55,8 @@ class SettingsActivity : ComponentActivity() {
     private var screen by mutableStateOf(SetScreen.SETTINGS)
     private var settings by mutableStateOf(RecentsSettings())
     private var setFocus by mutableIntStateOf(0)
+    private var submenu by mutableStateOf<SettingsSubmenu?>(null)
+    private val submenuBackStack = mutableListOf<Pair<SettingsSubmenu?, Int>>()
     private var section by mutableStateOf<SettingsSection?>(null)
     private var rootFocus by mutableIntStateOf(0)
     private var presetFocus by mutableIntStateOf(0)
@@ -74,6 +77,7 @@ class SettingsActivity : ComponentActivity() {
     private var appsLoadJob: kotlinx.coroutines.Job? = null
     private var appsLoadGeneration = 0
     private var managerStatus by mutableStateOf("Checking access")
+    private var usageAccessGranted by mutableStateOf(true)
     private var managerReady by mutableStateOf<Boolean?>(null)
     private var managerLabel by mutableStateOf("Porter / Shizuku")
     private var statusJob: kotlinx.coroutines.Job? = null
@@ -94,7 +98,13 @@ class SettingsActivity : ComponentActivity() {
         lifecycleScope.launch {
             store.settings.collect { updated ->
                 val focusedPackage = apps.getOrNull(excFocus)?.packageName
+                val focusedSetting = section?.let { currentRows(it).getOrNull(setFocus) }
                 settings = updated
+                if (focusedSetting != null) {
+                    val rows = currentRows(section!!)
+                    val retained = rows.indexOf(focusedSetting)
+                    setFocus = if (retained >= 0) retained else setFocus.coerceIn(0, rows.lastIndex.coerceAtLeast(0))
+                }
                 if (apps.isNotEmpty()) {
                     val sorted = sortExceptions(apps, if (screen == SetScreen.PROTECTED) updated.protectedApps else updated.exceptions)
                     apps.clear(); apps.addAll(sorted)
@@ -106,18 +116,12 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             val menuStates = rememberSaveableStateHolder()
             RecentsTheme(accent = if (colorPrompt) AccentChart.colors[chartFocus] else settings.accentColor) {
-                menuStates.SaveableStateProvider("${screen.name}:${section?.name.orEmpty()}") {
+                menuStates.SaveableStateProvider("${screen.name}:${section?.name.orEmpty()}:${submenu?.name.orEmpty()}") {
                 when (screen) {
                     SetScreen.PRESETS -> AppearancePresetsScreen(presetFocus, canRestoreAppearance, settings.smoothMotion)
-                    SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, bottomNotice = if (aboutFocus > 0) "Links open in your TV browser, if one is installed." else null)
-                    SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true,
-                        bottomNotice = when (updateFocus) {
-                            1 -> "Downloads and installation start only when you choose them. Android controls storage placement."
-                            2 -> "No background timer. Reopening the overlay does not repeat the startup check."
-                            3 -> "Update messages appear inside the app; no Android notification permission is needed."
-                            4 -> "Links open in your TV browser, if one is installed."
-                            else -> null
-                        })
+                    SetScreen.ABOUT -> AboutScreen(version, aboutFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings)
+                    SetScreen.UPDATES -> AboutScreen(version, updateFocus, UpdateManager.state.collectAsStateWithLifecycle().value, installAllowed, settings, updatesOnly = true)
+                    SetScreen.SUBMENU -> SettingsScreen(settings, section ?: SettingsSection.CONTROLS, setFocus, excSummary(), protectedSummary(), managerLabel, managerStatus, if (settings.usePrivileged) managerReady else false, usageAccessGranted, rowsOverride = submenu!!.rowsFor(settings), titleOverride = submenu!!.title)
                     SetScreen.SETTINGS -> if (section == null) SettingsHome(rootFocus, settings.smoothMotion) else SettingsScreen(
                         settings = settings,
                         section = section!!,
@@ -127,6 +131,7 @@ class SettingsActivity : ComponentActivity() {
                         managerName = managerLabel,
                         managerStatus = managerStatus,
                         privilegedActive = if (settings.usePrivileged) managerReady else false,
+                        usageAccessGranted = usageAccessGranted,
                     )
                     SetScreen.EXCEPTIONS, SetScreen.PROTECTED -> ExceptionsScreen(
                         apps = apps,
@@ -247,23 +252,30 @@ class SettingsActivity : ComponentActivity() {
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
-            if (screen == SetScreen.UPDATES) { screen = SetScreen.ABOUT }
+            if (screen == SetScreen.SUBMENU) {
+                val parent = submenuBackStack.removeAt(submenuBackStack.lastIndex)
+                submenu = parent.first; setFocus = parent.second
+                screen = if (submenu == null) SetScreen.SETTINGS else SetScreen.SUBMENU
+            }
+            else if (screen == SetScreen.UPDATES) { screen = SetScreen.ABOUT }
             else if (screen != SetScreen.SETTINGS) {
                 appsLoadGeneration++; appsLoadJob?.cancel(); appsLoading = false
-                screen = SetScreen.SETTINGS
+                screen = if (submenu != null) SetScreen.SUBMENU else SetScreen.SETTINGS
             }
             else if (section != null) { section = null; setFocus = 0 }
             else finish()
             return true
         }
         when (screen) {
-            SetScreen.SETTINGS -> settingsKey(event.keyCode)
+            SetScreen.SETTINGS, SetScreen.SUBMENU -> settingsKey(event.keyCode)
             SetScreen.EXCEPTIONS, SetScreen.PROTECTED -> excKey(event.keyCode)
             SetScreen.PRESETS -> when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP -> presetFocus = (presetFocus - 1).coerceAtLeast(0)
-                KeyEvent.KEYCODE_DPAD_DOWN -> presetFocus = (presetFocus + 1).coerceAtMost(AppearancePreset.entries.size)
+                KeyEvent.KEYCODE_DPAD_DOWN -> presetFocus = (presetFocus + 1).coerceAtMost(AppearancePreset.entries.size + 1)
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
-                    if (presetFocus < AppearancePreset.entries.size || canRestoreAppearance) {
+                    if (presetFocus == AppearancePreset.entries.size + 1) {
+                        startActivity(android.content.Intent(this, ProfilesActivity::class.java))
+                    } else if (presetFocus < AppearancePreset.entries.size || canRestoreAppearance) {
                         confirmPreset = false; presetPrompt = true
                     }
                 }
@@ -282,6 +294,11 @@ class SettingsActivity : ComponentActivity() {
         return true
     }
 
+    private fun openSubmenu(menu: SettingsSubmenu) {
+        submenuBackStack.add(submenu to setFocus)
+        submenu = menu; setFocus = 0; screen = SetScreen.SUBMENU
+    }
+    private fun currentRows(section: SettingsSection) = submenu?.rowsFor(settings) ?: section.rowsFor(settings)
     private fun settingsKey(code: Int) {
         val activeSection = section
         if (activeSection == null) {
@@ -293,7 +310,7 @@ class SettingsActivity : ComponentActivity() {
                         SettingsMenu.reset -> { confirmReset = false; resetPrompt = true }
                         SettingsMenu.presets -> { presetFocus = 0; screen = SetScreen.PRESETS }
                         SettingsMenu.about -> { aboutFocus = 0; screen = SetScreen.ABOUT }
-                        else -> { section = SettingsSection.entries[rootFocus]; setFocus = 0 }
+                        else -> { section = SettingsMenu.sectionAt(rootFocus); setFocus = 0 }
                     }
                 }
             }
@@ -301,18 +318,47 @@ class SettingsActivity : ComponentActivity() {
         }
         when (code) {
             KeyEvent.KEYCODE_DPAD_UP -> setFocus = (setFocus - 1).coerceAtLeast(0)
-            KeyEvent.KEYCODE_DPAD_DOWN -> setFocus = (setFocus + 1).coerceAtMost(activeSection.rows.lastIndex)
+            KeyEvent.KEYCODE_DPAD_DOWN -> setFocus = (setFocus + 1).coerceAtMost(currentRows(activeSection).lastIndex)
             KeyEvent.KEYCODE_DPAD_LEFT -> adjust(-1)
             KeyEvent.KEYCODE_DPAD_RIGHT -> adjust(+1)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A ->
-                when (activeSection.rows[setFocus]) {
+                when (currentRows(activeSection).getOrNull(setFocus)) {
+                    SetRow.DOWN_OPTIONS -> openSubmenu(SettingsSubmenu.DOWN)
+                    SetRow.RESTORE_TOP -> Unit
+                    SetRow.HIDE_TOP_RESTORE -> persist { store.toggleHideTopRestore() }
+                    SetRow.EDGE_HELP -> persist { store.toggleEdgeHints() }
+                    SetRow.EDGE_OPTIONS -> openSubmenu(SettingsSubmenu.SHORTCUT)
+                    SetRow.VIEW_OPTIONS -> openSubmenu(SettingsSubmenu.VIEW)
+                    SetRow.DISMISS_OPTIONS -> openSubmenu(SettingsSubmenu.DISMISS)
+                    SetRow.PROTECTION_OPTIONS -> openSubmenu(SettingsSubmenu.PROTECTION)
+                    SetRow.BULK_OPTIONS -> openSubmenu(SettingsSubmenu.BULK)
+                    SetRow.EDGE_MENU_OPTIONS -> openSubmenu(SettingsSubmenu.EDGE)
+                    SetRow.HIDE_TOP_BULK -> persist { store.toggleHideTopBulk() }
+                    SetRow.HIDE_TOP_SWITCH -> persist { store.toggleHideTopSwitch() }
+                    SetRow.DOWN_WITHOUT_ACCESS -> Unit
+                    SetRow.DISMISS_ENABLE -> Unit
+                    SetRow.TASK_INDICATOR -> persist { store.toggleTaskIndicator() }
+                    SetRow.RESTORE_DISMISSED -> persist {
+                        store.restoreDismissed()
+                        android.widget.Toast.makeText(this, "Dismissed apps restored", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                     SetRow.ACCENT -> { chartFocus = AccentChart.nearest(settings.accentColor); colorPrompt = true }
                     SetRow.HIDDEN_KILL_EXCLUSION -> persist { store.toggleHiddenKillExclusion() }
+                    SetRow.PROTECTION_FEEDBACK -> persist { store.adjustProtectionFeedback(1) }
+                    SetRow.DISMISS_PROTECTED -> persist { store.toggleAllowDismissProtected() }
                     SetRow.INDIVIDUAL_PROTECTION -> persist { store.toggleIndividualProtection() }
-                    SetRow.CONFIRM_KILL_ALL -> persist { store.toggleKillAllConfirmation() }
                     SetRow.FORCE_STOP -> persist { store.toggleForceStop() }
-                    SetRow.HEADER -> persist { store.toggleShowHeader() }
+                    SetRow.HEADER -> Unit
                     SetRow.SETTINGS_BUTTON -> persist { store.toggleSettingsButton() }
+                    SetRow.RESTORE_CONFIRM -> persist { store.toggleRestoreConfirmation() }
+                    SetRow.EDGE_MENU_RESTORE -> persist { store.toggleEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.RESTORE_DISMISSED) }
+                    SetRow.EDGE_MENU_SWITCH -> persist { store.toggleEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.SWITCH_VIEW) }
+                    SetRow.EDGE_MENU_CLOSE -> persist { store.toggleEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.CLOSE_ALL) }
+                    SetRow.EDGE_MENU_DISMISS -> persist { store.toggleEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.DISMISS_ALL) }
+                    SetRow.EDGE_MENU_SETTINGS -> persist { store.toggleEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.SETTINGS) }
+                    SetRow.VIEW_SWITCH -> Unit
+                    SetRow.VIEW_NOTICE -> Unit
+                    SetRow.REMEMBER_VIEW -> persist { store.toggleRememberView() }
                     SetRow.APP_NAMES -> persist { store.toggleAppNames() }
                     SetRow.HELP -> persist { store.toggleShowHelp() }
                     SetRow.MOTION -> persist { store.toggleSmoothMotion() }
@@ -333,7 +379,14 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private fun adjust(dir: Int) {
-        when (section?.rows?.getOrNull(setFocus)) {
+        when (section?.let { currentRows(it) }?.getOrNull(setFocus)) {
+            SetRow.BULK_ACTION -> persist { store.adjustBulkWithAccess(dir) }
+            SetRow.BULK_WITHOUT_ACCESS -> persist { store.adjustBulkWithoutAccess(dir) }
+            SetRow.LIST_MODE -> persist { store.adjustListMode(dir) }
+            SetRow.DOWN_ACTION -> persist { store.adjustDownWithAccess(dir) }
+            SetRow.DOWN_WITHOUT_ACCESS -> persist { store.adjustDownWithoutAccess(dir) }
+            SetRow.DISMISS_ENABLE -> persist { store.adjustDismissal(dir) }
+            SetRow.TASK_INDICATOR -> persist { store.setTaskIndicator(dir > 0) }
             SetRow.POSITION -> persist { store.adjustPosition(dir) }
             SetRow.DIRECTION -> persist { store.adjustDirection(dir) }
             SetRow.SIZE -> persist { store.adjustSize(dir) }
@@ -344,16 +397,39 @@ class SettingsActivity : ComponentActivity() {
             SetRow.BG_TINT -> persist { store.adjustBgTint(dir) }
             SetRow.KILL_ALL -> persist { store.adjustKillAllLocation(dir) }
             SetRow.HIDDEN_KILL_EXCLUSION -> persist { store.setHiddenKillExclusion(dir > 0) }
+            SetRow.PROTECTION_FEEDBACK -> persist { store.adjustProtectionFeedback(dir) }
+            SetRow.DISMISS_PROTECTED -> persist { store.setAllowDismissProtected(dir > 0) }
             SetRow.INDIVIDUAL_PROTECTION -> persist { store.setIndividualProtection(dir > 0) }
-            SetRow.CONFIRM_KILL_ALL -> persist { store.setKillAllConfirmation(dir > 0) }
+            SetRow.CONFIRM_KILL_ALL -> persist { store.adjustBulkConfirmation(dir) }
             SetRow.FORCE_STOP -> persist { store.setForceStop(dir > 0) }
-            SetRow.HEADER -> persist { store.setShowHeader(dir > 0) }
+            SetRow.HIDE_TOP_BULK -> persist { store.setHideTopBulk(dir > 0) }
+            SetRow.HIDE_TOP_SWITCH -> persist { store.setHideTopSwitch(dir > 0) }
+            SetRow.DISMISS_SCOPE -> persist { store.adjustDismissScope(dir) }
+            SetRow.HEADER -> persist { store.adjustHeaderMode(dir) }
             SetRow.SETTINGS_BUTTON -> persist { store.setShowSettingsButton(dir > 0) }
+            SetRow.VIEW_SWITCH -> persist { store.adjustViewButtons(dir) }
+            SetRow.EDGE_SHORTCUT -> persist { store.adjustEdgeShortcut(dir) }
+            SetRow.CONTEXT_RESTORE -> persist { store.adjustContextRestore(dir) }
+            SetRow.RESTORE_TOP -> persist { store.adjustRestoreTopMode(dir) }
+            SetRow.HIDE_TOP_RESTORE -> persist { store.setHideTopRestore(dir > 0) }
+            SetRow.EDGE_HELP -> persist { store.setEdgeHints(dir > 0) }
+            SetRow.EMPTY_RECOVERY -> persist { store.adjustRecovery(dir) }
+            SetRow.EDGE_WITHOUT_ACCESS -> persist { store.adjustEdgeWithoutAccess(dir) }
+            SetRow.RESTORE_CONFIRM -> persist { store.setRestoreConfirmation(dir > 0) }
+            SetRow.EDGE_MENU_RESTORE -> persist { store.setEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.RESTORE_DISMISSED, dir > 0) }
+            SetRow.EDGE_ACTION -> persist { store.adjustEdgeAction(dir) }
+            SetRow.EDGE_MENU_SETTINGS -> persist { store.setEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.SETTINGS, dir > 0) }
+            SetRow.EDGE_MENU_DISMISS -> persist { store.setEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.DISMISS_ALL, dir > 0) }
+            SetRow.EDGE_MENU_CLOSE -> persist { store.setEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.CLOSE_ALL, dir > 0) }
+            SetRow.EDGE_MENU_SWITCH -> persist { store.setEdgeMenuItem(com.websnake.recentstv.data.EdgeMenuItem.SWITCH_VIEW, dir > 0) }
+            SetRow.ROW_SWITCH_POSITION -> persist { store.adjustRowSwitchPosition(dir) }
+            SetRow.VIEW_NOTICE -> persist { store.adjustViewNotice(dir) }
+            SetRow.REMEMBER_VIEW -> persist { store.setRememberView(dir > 0) }
             SetRow.APP_NAMES -> persist { store.setAppNames(dir > 0) }
             SetRow.APP_TEXT_POSITION -> persist { store.adjustAppTextPosition(dir) }
             SetRow.APP_DETAILS -> persist { store.adjustAppDetailsMode(dir) }
             SetRow.CLOSE_HINT -> persist { store.adjustCloseHintStyle(dir) }
-            SetRow.CLOSE_SPEED -> persist { store.adjustCloseAnimationSpeed(dir) }
+            SetRow.CLOSE_SPEED -> persist { store.adjustAnimationSpeed(dir) }
             SetRow.HELP -> persist { store.setShowHelp(dir > 0) }
             SetRow.MOTION -> persist { store.setSmoothMotion(dir > 0) }
             SetRow.PRIVILEGED -> persist { store.setUsePrivileged(dir > 0) }
@@ -362,6 +438,7 @@ class SettingsActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
+        usageAccessGranted = com.websnake.recentstv.data.RecentTasksRepository(applicationContext).hasUsageAccess()
         UpdateManager.onResume(this)
         installAllowed = UpdateManager.canInstall(this)
         statusJob?.cancel()

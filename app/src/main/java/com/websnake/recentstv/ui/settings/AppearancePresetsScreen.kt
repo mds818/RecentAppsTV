@@ -23,13 +23,14 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boole
     Column(Modifier.fillMaxSize().background(Tokens.bg).padding(start = 60.dp, end = 60.dp, top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Appearance presets", style = Type.title, color = Tokens.text)
-        Text("Try a look, or restore your saved appearance.", style = Type.small, color = Tokens.textDim)
+        Text("Apply a preset, manage saved profiles, or undo your last preset.", style = Type.small, color = Tokens.textDim)
         Text("↑↓ Choose · OK Review · BACK Return", style = Type.small, color = Tokens.textDim,
             modifier = Modifier.padding(bottom = 4.dp))
         LazyColumn(state = listState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(AppearancePreset.entries.size + 1) { index ->
+        items(AppearancePreset.entries.size + 2) { index ->
             val preset = AppearancePreset.entries.getOrNull(index)
-            val available = preset != null || canRestore
+            val personal = index == AppearancePreset.entries.size + 1
+            val available = personal || preset != null || canRestore
             Column {
             if (preset == null) {
                 Spacer(Modifier.height(8.dp))
@@ -40,14 +41,14 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boole
                 .background(if (focus == index) Tokens.surface2 else Tokens.surface)
                 .border(1.dp, if (focus == index) LocalAccent.current.base else Color.Transparent, RoundedCornerShape(11.dp))
                 .padding(horizontal = 22.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(preset?.title ?: "Restore previous appearance", style = Type.row, color = if (available) Tokens.text else Tokens.textDim)
-                Text(preset?.description ?: if (canRestore) "Return to the look saved before your first preset" else "Available after applying a preset",
+                Text(if (personal) "My profiles · Import / Export" else preset?.title ?: "Undo last preset", style = Type.row, color = if (available) Tokens.text else Tokens.textDim)
+                Text(if (personal) "Save your setup, manage profiles or transfer a JSON file" else preset?.description ?: if (canRestore) "Return to the look saved before your most recent preset" else "Available after applying a preset",
                     style = Type.small, color = Tokens.textDim)
             }
             }
         }
         item {
-            Text("Your restore point stays saved while trying presets, even after restarting the app.",
+            Text("Each preset replaces the backup with your setup immediately before that change. The backup survives restarts.",
                 style = Type.small, color = Tokens.textDim, modifier = Modifier.padding(top = 4.dp))
         }
         }
@@ -60,15 +61,15 @@ fun ApplyPresetDialog(preset: AppearancePreset?, confirmSelected: Boolean) {
         Column(Modifier.width(540.dp).clip(RoundedCornerShape(20.dp)).background(Tokens.surface)
             .border(1.dp, Tokens.line, RoundedCornerShape(20.dp)).padding(28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(if (preset == null) "Restore previous appearance?" else "Apply ${preset.title}?", style = Type.title, color = Tokens.text)
-            Text(preset?.description ?: "Return to the appearance you had before trying these presets.", style = Type.body, color = Tokens.textDim)
+            Text(if (preset == null) "Undo last preset?" else "Apply ${preset.title}?", style = Type.title, color = Tokens.text)
+            Text(preset?.description ?: "Return to the appearance and preset-related choices from immediately before the most recent preset.", style = Type.body, color = Tokens.textDim)
             Text(if (preset == null) "This uses your saved restore point. Applying another preset afterward will save a new one."
                 else if (preset == AppearancePreset.CLASSIC) "Medium rounded cards · Green · 60% Charcoal dim. Your previous appearance stays saved."
-                else "Large circular cards · Green · 80% dim. Your previous appearance stays saved until you restore it.",
+                else "Large circular cards · Green · 80% dim. Your current setup is backed up before applying this preset.",
                 style = Type.small, color = Tokens.textDim)
             if (preset == AppearancePreset.CLEAN_PLUS) Text("Settings stays available: press UP twice. Names and Kill All are hidden.",
                 style = Type.small, color = Tokens.textDim)
-            Text("Exceptions, protected apps, confirmation, force-stop and Porter / Shizuku choices are kept.",
+            Text(if (preset == AppearancePreset.DEFAULT) "Default also applies dismissal, DOWN and edge shortcut choices. Your previous values remain restorable." else "Exceptions, protected apps, confirmation, force-stop and Porter / Shizuku choices are kept.",
                 style = Type.small, color = Tokens.textDim)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 listOf("Cancel", if (preset == null) "Restore" else "Apply").forEachIndexed { index, label ->

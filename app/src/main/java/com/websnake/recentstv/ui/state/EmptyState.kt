@@ -20,7 +20,14 @@ import com.websnake.recentstv.ui.theme.Type
 
 /** Surface 4 — no recent tasks. Kill-All is hidden in this state. */
 @Composable
-fun EmptyState() {
+fun EmptyState(guidance: String = "OK  Exit     ↑  Settings     BACK  Exit", tasksView: Boolean = false, compact: Boolean = false) {
+    if (compact) {
+        Box(Modifier.fillMaxSize()) {
+            Text(if (tasksView) "No tasks" else "No recent apps", style = Type.small, color = Tokens.textDim,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 128.dp))
+        }
+        return
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -40,13 +47,13 @@ fun EmptyState() {
                         .border(1.5.dp, Tokens.text.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
                 )
             }
-            Text("No recent apps", style = Type.title, color = Tokens.text)
+            Text(if (tasksView) "No tasks" else "No recent apps", style = Type.title, color = Tokens.text)
             Text(
-                "Apps you open will appear here.",
+                if (tasksView) "Switch to Recent apps to browse usage history." else "Apps you open will appear here.",
                 style = Type.body, color = Tokens.textDim, textAlign = TextAlign.Center,
             )
             Text(
-                "OK  Exit     ↑  Settings     BACK  Exit",
+                guidance,
                 style = Type.small, color = Tokens.textFaint, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 10.dp),
             )

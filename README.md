@@ -6,11 +6,11 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
-**Latest download: 1.0.1 · Build 20.** Compact menus, contextual information and build-aware updates. If you already use 1.0.1 Build 18, download and install this build manually once; future builds can be detected in About → Updates. Your settings are kept when updating with the same signing key.
+**Latest download: 1.1.0 · Build 48.** Recent apps or Android tasks, configurable close/dismiss actions, saved profiles with JSON import/export, and refined remote navigation. Updates signed with the same key keep your settings.
 
 ## Updates
 
-Version 1.0.1 adds **About → Updates**, with optional startup checks and optional in-app update messages. Downloads and installation start only when you choose them. See [update settings and installation](docs/UPDATES.md).
+Open **About → Updates**, with optional startup checks and optional in-app update messages. Downloads and installation start only when you choose them. See [update settings and installation](docs/UPDATES.md).
 
 <details>
 <summary>View update settings</summary>
@@ -73,7 +73,9 @@ Porter/Shizuku is **optional**. Everyday app browsing and launching can use Andr
 | **Usage Access only** | Recently used apps, ordered by foreground usage | Browse and launch apps. History does not mean an app is running. |
 | **Porter / Shizuku authorized** | Actual recent Android tasks | Switch tasks, close them and optionally force-stop apps. |
 
-The app automatically switches between the available modes. You can also turn privileged access off in Settings. Closing controls are hidden in usage-history mode.
+Without privileged access, the app uses Usage Access history. With Porter / Shizuku, choose recent applications or actual Android tasks, and optionally switch views from the overlay. Android tasks are not a list of every background process. You can also turn privileged access off in Settings.
+
+Dismissal hides an app until it is used again; it does not stop it. Configure DOWN and bulk actions separately for use with and without privileged access, and restore dismissed entries when needed.
 
 ## Customize the details
 
@@ -84,15 +86,19 @@ Keep only the information and controls you want to see.
 | **Layout and cards** | Centered or side selection; older apps to the left or right; card size, square/rounded/circle shape and padding. |
 | **Colors and background** | Accent presets and an expanded color chart; background dim level and tint. |
 | **Information** | App names, header and remote hints independently on/off; app details off, always on, or only with privileged access. |
-| **Navigation and motion** | Show or hide the Settings button; elevated or minimal close hint; smooth motion or immediate movement. Hidden Settings remains available with UP twice. |
-| **Closing controls** | Kill All with the apps, in the top controls, or hidden; optional confirmation; optional force-stop. |
+| **Navigation and motion** | Show or hide controls; configurable edge shortcuts; elevated or minimal close hints; Fast/Normal/Slow action animation or immediate movement. Hidden Settings remains available with UP twice. |
+| **Bulk actions** | Close or dismiss according to the current view/access mode; controls in the app row or at the top, optionally revealed on UP; configurable confirmation. |
 | **App lists and protection** | Hide apps, protect apps from Kill All, optionally protect individual closes, and choose whether hidden apps are excluded from Kill All. |
 
-Protected apps are always skipped by Kill All. Hidden apps are also skipped by default; turn off **Exclude hidden apps from Kill All** to include them. Closing features require authorized Porter/Shizuku access.
+Protected apps are skipped by Close all. Hidden apps are also skipped by default; turn off **Exclude hidden apps from Close all** to include them. Closing requires authorized Porter/Shizuku access. Dismissal of protected apps is controlled separately under **Apps → Protection**.
+
+### Save your own profiles
+
+Open **Appearance presets → My profiles** to save, apply, rename, export or import a configuration. Review every imported setting and undo the last profile application. Missing settings stay unchanged; unsupported settings are skipped with a detailed report. Files contain preferences, not app lists or permissions. Some TVs require a compatible document picker/file manager for file import/export; local profiles work without one. See [profiles and compatibility](docs/PROFILES.md).
 
 ## App actions
 
-Hold OK for app actions, or press DOWN twice to deliberately close a task when privileged access is available.
+Hold OK for contextual app actions. DOWN can be configured to close, dismiss, choose automatically, or do nothing according to privileged access. A second press confirms the individual action.
 
 <table>
   <tr>

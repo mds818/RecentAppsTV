@@ -34,7 +34,7 @@ val aboutActions = listOf(AboutAction.UPDATES, AboutAction.PROJECT, AboutAction.
 val updateActions = listOf(AboutAction.CHECK, AboutAction.INSTALL, AboutAction.AUTO_CHECK, AboutAction.NOTIFY, AboutAction.RELEASES)
 
 @Composable
-fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed: Boolean, settings: com.websnake.recentstv.data.RecentsSettings, updatesOnly: Boolean = false, bottomNotice: String? = null) {
+fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed: Boolean, settings: com.websnake.recentstv.data.RecentsSettings, updatesOnly: Boolean = false) {
     val actions = if (updatesOnly) updateActions else aboutActions
     val listState = rememberLazyListState()
     KeepFocusedItemVisible(listState, focus, settings.smoothMotion, updatesOnly)
@@ -93,9 +93,6 @@ fun AboutScreen(version: String, focus: Int, update: UpdateState, installAllowed
                 }
             }
         }
-        if (!bottomNotice.isNullOrBlank()) {
-            Text(bottomNotice, style = Type.small, color = Tokens.textDim,
-                modifier = Modifier.fillMaxWidth().background(Tokens.bg).padding(vertical = 10.dp))
-        }
+
     }
 }

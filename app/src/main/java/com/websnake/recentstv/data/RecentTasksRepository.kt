@@ -67,13 +67,13 @@ class RecentTasksRepository(private val context: Context) {
                 android.os.Process.myUid(), ownPackage) == android.app.AppOpsManager.MODE_ALLOWED
     }.getOrDefault(false)
 
-    fun getRecentApps(exceptions: Set<String>): List<RecentTask> {
-        if (!hasUsageAccess()) return emptyList()
+    fun getForegroundUsage(): Map<String, Long> {
+        if (!hasUsageAccess()) return emptyMap()
         val end = System.currentTimeMillis()
         val begin = end - java.util.concurrent.TimeUnit.DAYS.toMillis(7)
         val usage = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
         val lastForeground = HashMap<String, Long>()
-        val events = usage.queryEvents(begin, end) ?: return emptyList()
+        val events = usage.queryEvents(begin, end) ?: return emptyMap()
         val event = android.app.usage.UsageEvents.Event()
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
@@ -82,6 +82,10 @@ class RecentTasksRepository(private val context: Context) {
                 lastForeground[pkg] = maxOf(lastForeground[pkg] ?: 0L, event.timeStamp)
             }
         }
+        return lastForeground
+    }
+    fun getRecentApps(exceptions: Set<String>, lastForeground: Map<String, Long> = getForegroundUsage()): List<RecentTask> {
+        if (!hasUsageAccess()) return emptyList()
         return lastForeground.entries.asSequence()
             .filter { (pkg, _) ->
                 pkg !in skipPackages && pkg !in exceptions && !isHome(pkg) && pkgRepo.isUsable(pkg) &&
@@ -91,7 +95,7 @@ class RecentTasksRepository(private val context: Context) {
             .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
             .take(MAX_TASKS)
             .mapIndexed { i, entry -> RecentTask(-i - 1, entry.key, pkgRepo.label(entry.key),
-                pkgRepo.icon(entry.key), "Recently used (not a running task)", true) }
+                pkgRepo.icon(entry.key), pkgRepo.category(entry.key), true) }
             .toList()
     }
     // ── reading ──────────────────────────────────────────────────────────

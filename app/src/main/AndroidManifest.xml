@@ -73,6 +73,8 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".ProfilesActivity" android:exported="false" android:theme="@style/Theme.Recents.Solid" android:screenOrientation="landscape" />
+
         <receiver android:name=".updates.UpdateInstallReceiver" android:exported="false" />
 
         <provider

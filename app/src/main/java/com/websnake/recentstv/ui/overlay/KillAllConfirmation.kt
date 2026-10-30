@@ -14,22 +14,25 @@ import androidx.tv.material3.Text
 import com.websnake.recentstv.ui.theme.*
 
 @Composable
-fun KillAllConfirmation(count: Int, protectedCount: Int, forceStop: Boolean, confirmSelected: Boolean) {
+fun KillAllConfirmation(count: Int, protectedCount: Int, forceStop: Boolean, confirmSelected: Boolean, dismissOnly: Boolean = false, apps: List<PreviewApp> = emptyList(), protectedApps: List<PreviewApp> = emptyList()) {
     val accent = LocalAccent.current
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .75f)), contentAlignment = Alignment.Center) {
-        Column(Modifier.width(510.dp).clip(RoundedCornerShape(20.dp)).background(Tokens.surface)
-            .border(1.dp, Tokens.line, RoundedCornerShape(20.dp)).padding(28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Text(if (count == 0) "All recent apps are protected" else "Close $count ${if (count == 1) "app" else "apps"}?",
+        Column(Modifier.width(550.dp).clip(RoundedCornerShape(20.dp)).background(Tokens.surface)
+            .border(1.dp, Tokens.line, RoundedCornerShape(20.dp)).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(if (dismissOnly) "Dismiss $count ${if (count == 1) "app" else "apps"}?" else if (count == 0) "No Android tasks to close" else "Close $count ${if (count == 1) "app" else "apps"}?",
                 style = Type.title, color = Tokens.text)
-            Text(if (count == 0) "No apps will be closed. Manage protection in Settings → Apps."
+            Text(if (dismissOnly) "Hide these apps from this list until they are used again. Nothing is closed or force-stopped."
+                else if (count == 0) "No matching tasks can be closed. Check task availability and protection in Settings → Apps."
                 else if (forceStop) "This removes their recent tasks and force-stops the apps. Background activity may stop."
                 else "This removes their recent tasks. Background services may keep running.",
                 style = Type.body, color = Tokens.textDim)
-            Text("$protectedCount protected · protection can be changed in Settings → Apps",
+            AppPreviewStrip(if (dismissOnly) "Will dismiss" else "Will close", apps, count)
+            if (!dismissOnly) AppPreviewStrip("Protected · will stay", protectedApps, protectedCount)
+            Text(if (dismissOnly) "Restore the list in Settings → Apps → Dismissal." else "$protectedCount protected · protection can be changed in Settings → Apps",
                 style = Type.small, color = Tokens.textDim)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                listOf("Cancel", "Close apps").take(if (count == 0) 1 else 2).forEachIndexed { i, label ->
+                listOf("Cancel", if (dismissOnly) "Dismiss apps" else "Close apps").take(if (count == 0) 1 else 2).forEachIndexed { i, label ->
                     val selected = if (i == 0) !confirmSelected else confirmSelected
                     Box(Modifier.padding(start = 12.dp).clip(RoundedCornerShape(8.dp))
                         .background(if (selected) accent.base else Tokens.surface2)
