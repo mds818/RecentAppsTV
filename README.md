@@ -6,7 +6,7 @@ Choose a starting look, then adjust the details to suit your remote and your TV.
 
 [**Download APK**](https://github.com/mds818/RecentAppsTV/releases/latest) · [**Watch the showcase**](#see-it-in-use) · [Getting started](#getting-started)
 
-**Latest download: 1.1.2 · Build 53.** Faster privileged app handoffs, smoother view switching and quicker returns from Settings through bounded icon reuse and fewer unnecessary redraws. All the configurable actions and saved profiles from 1.1.0 remain available. Updates signed with the same key keep your settings.
+**Latest download: 1.2.0 · Build 58.** Review presets and saved/imported profiles before applying: readable current → profile values, compatibility filters and one-step Undo. Updates signed with the same key keep your settings.
 
 ## Updates
 
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/5401121b-7119-416a-8c1d-ba1ccf0d87ee
 
 Four looks, one chapter each: **Default → Clean+ → Clean → Classic**. Clean and Classic each show browsing followed by a Spotify close in one continuous take. Both use **Slow** close animation at real playback speed. [Download video](https://github.com/mds818/RecentAppsTV/releases/download/v1.0.1/RecentAppsTV-showcase-1.0.1.mp4).
 
-Presets are starting points. Mix and match the settings afterward. Your previous appearance is saved when you first apply a preset and stays available through further preset changes and app restarts. **Restore previous appearance** brings it back. App lists and service/closing preferences are kept when applying presets.
+Presets are starting points. Choose **Full preset** for app defaults plus the preset's look and controls, or **Appearance only** to keep your action preferences. **View changes** shows the result before applying. **Undo last preset** restores the setup immediately before your most recent preset application, including after a restart. Presets keep personal app lists, saved profiles, protection, access and update preferences. [How presets work](docs/PRESETS.md).
 
 ## Usage & settings tour
 
@@ -94,7 +94,7 @@ Protected apps are skipped by Close all. Hidden apps are also skipped by default
 
 ### Save your own profiles
 
-Open **Appearance presets → My profiles** to save, apply, rename, export or import a configuration. Review every imported setting and undo the last profile application. Missing settings stay unchanged; unsupported settings are skipped with a detailed report. Files contain preferences, not app lists or permissions. Some TVs require a compatible document picker/file manager for file import/export; local profiles work without one. See [profiles and compatibility](docs/PROFILES.md).
+Open **Appearance presets → My profiles** to save, apply, rename, export or import a configuration. Selecting a saved profile opens its review directly; **Manage profile** groups Export, Rename and Delete. Both saved and imported profiles offer **View changes** and **All profile settings**, with **Changes · All · Compatibility** filters and detailed explanations. Missing settings stay unchanged; unsupported settings are skipped. Undo restores the previous settings. Files contain preferences, not app lists or Android permissions. Some TVs require a compatible document picker/file manager for import/export; local profiles work without one. See [profiles and compatibility](docs/PROFILES.md).
 
 ## App actions
 

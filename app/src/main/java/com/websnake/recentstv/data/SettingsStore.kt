@@ -251,6 +251,31 @@ class SettingsStore(context: Context) {
         }
         return report.copy(recognized = report.settings.length(), skipped = skipped, entries = report.entries.map { entry -> explanations[entry.key]?.let { reason -> entry.copy(status = if (report.settings.has(entry.key)) "Partial" else "Skip", reason = reason) } ?: entry })
     }
+    suspend fun previewProfile(raw: String): List<PresetChange> {
+        val report = inspectProfile(raw)
+        val before = dataStore.data.first()
+        val candidate = before.toMutablePreferences()
+        applyProfileValues(candidate, report.settings)
+        return PresetChanges.between(decode(before), decode(candidate))
+    }
+    suspend fun reviewProfileSettings(raw: String): ProfileReviewSnapshot {
+        val report = inspectProfile(raw)
+        val before = dataStore.data.first()
+        val candidate = before.toMutablePreferences()
+        applyProfileValues(candidate, report.settings)
+        val current = decode(before)
+        val target = decode(candidate)
+        val original = profileSnapshot(before)
+        val accepted = report.settings.keys().asSequence().toSet()
+        val effects = accepted.associateWith { key ->
+            val without = candidate.toMutablePreferences()
+            applyProfileValues(without, org.json.JSONObject().put(key, original.opt(key) ?: org.json.JSONObject.NULL))
+            PresetChanges.between(decode(without), target)
+        }
+        val rows = ProfileSettingsReview.build(report.entries, accepted, current, target,
+            before.asMap().mapKeys { it.key.name }, candidate.asMap().mapKeys { it.key.name }, effects)
+        return ProfileReviewSnapshot(report, PresetChanges.between(current, target), rows)
+    }
     suspend fun applyProfile(raw: String) {
         val report = inspectProfile(raw)
         require(report.recognized > 0) { "No compatible settings" }
@@ -279,7 +304,7 @@ class SettingsStore(context: Context) {
         for (i in 0 until old.length()) if (old.getJSONObject(i).optString("id") != id) next.put(old.getJSONObject(i))
         p[Keys.savedProfiles] = next.toString()
     }
-    val canRestoreAppearance = dataStore.data.map { readSnapshot(it[Keys.appearanceRestore]) != null }
+    val canRestoreAppearance = dataStore.data.map { readPresetUndo(it[Keys.appearanceRestore]) != null || readSnapshot(it[Keys.appearanceRestore]) != null }
     private inline fun <reified T : Enum<T>> enumSetPreference(p: Preferences, key: Preferences.Key<Set<String>>): Set<T>? {
         if (!Keys.profileEnums.containsKey(key.name)) Keys.profileEnums.putIfAbsent(key.name, enumValues<T>().mapTo(HashSet()) { it.name })
         return p[key]?.mapNotNull { runCatching { enumValueOf<T>(it) }.getOrNull() }?.toSet()
@@ -537,6 +562,9 @@ class SettingsStore(context: Context) {
         val profiles = p[Keys.savedProfiles]
         p.clear()
         if (profiles != null) p[Keys.savedProfiles] = profiles
+        writePresetDefaults(p)
+    }
+    private fun writePresetDefaults(p: MutablePreferences) {
         val defaults = AppearancePreset.DEFAULT.appearance()
         p[Keys.rememberView] = defaults.rememberView
         p[Keys.viewButtons] = defaults.viewButtons.name
@@ -551,17 +579,48 @@ class SettingsStore(context: Context) {
         p[Keys.restoreTopMode] = defaults.restoreTopMode.name
         p[Keys.hideTopRestore] = defaults.hideTopRestore
     }
-    suspend fun applyAppearancePreset(preset: AppearancePreset) = dataStore.edit { p ->
-        // One-step undo: each application backs up the setup immediately before it.
-        p[Keys.appearanceRestore] = snapshot(p)
-        val checkpoint = readSnapshot(p[Keys.appearanceRestore])!!
-        val before = decode(p)
-        // Older appearance checkpoints did not contain action choices; retain their current values.
-        listOf(kotlin.Pair(Keys.edgeAction, before.edgeAction.name), kotlin.Pair(Keys.edgeWithoutAccess, before.edgeWithoutAccess.name),
-            kotlin.Pair(Keys.downWithAccess, before.downWithAccess.name), kotlin.Pair(Keys.downWithoutAccess, before.downWithoutAccess.name),
-            kotlin.Pair(Keys.dismissScope, before.dismissScope.name)).forEach { (key, value) -> if (!checkpoint.has(key.name)) checkpoint.put(key.name, value) }
-        if (!checkpoint.has(Keys.enableDismiss.name)) checkpoint.put(Keys.enableDismiss.name, before.enableDismiss)
-        p[Keys.appearanceRestore] = checkpoint.toString()
+    private fun presetKeys(): Set<String> = profileSchema().keys.filterTo(linkedSetOf()) { PresetPolicy.managed(it) }
+    private fun presetUndo(p: Preferences) = org.json.JSONObject().put("presetVersion", 2).put("values",
+        profileSnapshot(p).let { all -> org.json.JSONObject().apply { presetKeys().forEach { put(it, all.opt(it) ?: org.json.JSONObject.NULL) } } }).toString()
+    private fun readPresetUndo(raw: String?): org.json.JSONObject? = runCatching {
+        val doc = org.json.JSONObject(requireNotNull(raw)); require(doc.getInt("presetVersion") == 2)
+        doc.getJSONObject("values").also { values ->
+            require(values.keys().asSequence().all { it in presetKeys() && ProfileCodec.accepts(profileSchema().getValue(it), values.get(it)) })
+        }
+    }.getOrNull()
+    private fun presetCandidate(p: Preferences, preset: AppearancePreset, mode: PresetApplyMode): MutablePreferences {
+        val candidate = p.toMutablePreferences()
+        if (mode == PresetApplyMode.FULL) {
+            applyProfileValues(candidate, org.json.JSONObject().apply { presetKeys().forEach { put(it, org.json.JSONObject.NULL) } })
+            writePresetDefaults(candidate)
+        }
+        writePresetLook(candidate, preset)
+        if (mode == PresetApplyMode.APPEARANCE_ONLY) {
+            val allowed = (appearanceStrings + appearanceBooleans + appearanceInts).map { it.name }.filter { PresetPolicy.visual(it) }.toSet()
+            val original = profileSnapshot(p)
+            applyProfileValues(candidate, org.json.JSONObject().apply {
+                presetKeys().filter { it !in allowed }.forEach { put(it, original.opt(it) ?: org.json.JSONObject.NULL) }
+            })
+        }
+        return candidate
+    }
+    suspend fun previewAppearanceModes(preset: AppearancePreset): Map<PresetApplyMode, List<PresetChange>> {
+        val before = dataStore.data.first()
+        val current = decode(before)
+        return PresetApplyMode.entries.associateWith { mode -> PresetChanges.between(current, decode(presetCandidate(before, preset, mode))) }
+    }
+    suspend fun previewAppearancePreset(preset: AppearancePreset, mode: PresetApplyMode): List<PresetChange> {
+        val before = dataStore.data.first()
+        return PresetChanges.between(decode(before), decode(presetCandidate(before, preset, mode)))
+    }
+    suspend fun applyAppearancePreset(preset: AppearancePreset, mode: PresetApplyMode = PresetApplyMode.FULL) = dataStore.edit { p ->
+        val undo = presetUndo(p)
+        val candidate = presetCandidate(p, preset, mode)
+        val values = profileSnapshot(candidate)
+        applyProfileValues(p, org.json.JSONObject().apply { presetKeys().forEach { put(it, values.opt(it) ?: org.json.JSONObject.NULL) } })
+        p[Keys.appearanceRestore] = undo
+    }
+    private fun writePresetLook(p: MutablePreferences, preset: AppearancePreset) {
         val look = preset.appearance()
         if (preset == AppearancePreset.DEFAULT) {
             p[Keys.edgeShortcut] = look.edgeShortcut.name
@@ -610,8 +669,12 @@ class SettingsStore(context: Context) {
     suspend fun restoreAppearance(): Boolean {
         var restored = false
         dataStore.edit { p ->
+            val complete = readPresetUndo(p[Keys.appearanceRestore])
             val saved = readSnapshot(p[Keys.appearanceRestore])
-            if (saved != null) {
+            if (complete != null) {
+                applyProfileValues(p, complete)
+                restored = true
+            } else if (saved != null) {
                 appearanceStrings.forEach { key ->
                     p.remove(key)
                     if (saved.has(key.name)) p[key] = saved.getString(key.name)

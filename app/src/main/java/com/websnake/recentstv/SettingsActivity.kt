@@ -16,6 +16,10 @@ import com.websnake.recentstv.data.InstalledApp
 import com.websnake.recentstv.data.PackageRepository
 import com.websnake.recentstv.data.RecentsSettings
 import com.websnake.recentstv.data.SettingsStore
+import com.websnake.recentstv.data.PresetApplyMode
+import com.websnake.recentstv.data.PresetChange
+import com.websnake.recentstv.ui.settings.PresetReview
+import androidx.compose.runtime.LaunchedEffect
 import com.websnake.recentstv.data.AppearancePreset
 import com.websnake.recentstv.ui.settings.SettingsMenu
 import com.websnake.recentstv.ui.settings.AppearancePresetsScreen
@@ -64,6 +68,13 @@ class SettingsActivity : ComponentActivity() {
     private var updateFocus by mutableIntStateOf(0)
     private var installAllowed by mutableStateOf(false)
     private var presetPrompt by mutableStateOf(false)
+    private var presetMode by mutableStateOf(PresetApplyMode.FULL)
+    private var presetReviewFocus by mutableIntStateOf(0)
+    private var presetDetails by mutableStateOf(false)
+    private var presetDetailFocus by mutableIntStateOf(0)
+    private var presetPreviews by mutableStateOf<Map<PresetApplyMode, List<PresetChange>>>(emptyMap())
+    private val presetChanges get() = presetPreviews[presetMode]
+    private var presetPreviewError by mutableStateOf(false)
     private var confirmPreset by mutableStateOf(false)
     private var canRestoreAppearance by mutableStateOf(false)
     private val apps = mutableStateListOf<InstalledApp>()
@@ -148,7 +159,19 @@ class SettingsActivity : ComponentActivity() {
                 }
                 if (resetPrompt) com.websnake.recentstv.ui.settings.ResetDefaultsDialog(confirmReset)
                 if (colorPrompt) AccentColorChart(chartFocus)
-                if (presetPrompt) ApplyPresetDialog(AppearancePreset.entries.getOrNull(presetFocus), confirmPreset)
+                if (presetPrompt) {
+                    val preset = AppearancePreset.entries.getOrNull(presetFocus)
+                    if (preset == null) ApplyPresetDialog(null, confirmPreset)
+                    else {
+                        LaunchedEffect(preset, settings) {
+                            presetPreviewError = false
+                            try { presetPreviews = store.previewAppearanceModes(preset) }
+                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (_: Exception) { presetPreviewError = true }
+                        }
+                        PresetReview(preset, presetMode, presetReviewFocus, presetChanges, presetDetails, presetDetailFocus, settings.smoothMotion, presetPreviewError)
+                    }
+                }
             }
         }
     }
@@ -195,6 +218,45 @@ class SettingsActivity : ComponentActivity() {
         // Holding OK must not repeat toggles or confirm an action opened by that same press.
         if (isOk && event.repeatCount > 0) return true
         if (presetPrompt) {
+            val reviewed = AppearancePreset.entries.getOrNull(presetFocus)
+            if (reviewed != null) {
+                if (presetDetails) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> presetDetailFocus = (presetDetailFocus - 1).coerceAtLeast(0)
+                        KeyEvent.KEYCODE_DPAD_DOWN -> presetDetailFocus = (presetDetailFocus + 1).coerceAtMost((presetChanges?.lastIndex ?: 0).coerceAtLeast(0))
+                        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> presetDetails = false
+                        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            presetMode = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) PresetApplyMode.FULL else PresetApplyMode.APPEARANCE_ONLY
+                            presetDetailFocus = presetDetailFocus.coerceAtMost((presetChanges?.lastIndex ?: 0).coerceAtLeast(0))
+                        }
+                        else -> if (isOk) presetDetails = false
+                    }
+                } else when (event.keyCode) {
+                    KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> presetPrompt = false
+                    KeyEvent.KEYCODE_DPAD_UP -> presetReviewFocus = (presetReviewFocus - 1).coerceAtLeast(0)
+                    KeyEvent.KEYCODE_DPAD_DOWN -> presetReviewFocus = (presetReviewFocus + 1).coerceAtMost(3)
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> if (presetReviewFocus >= 2) {
+                        presetReviewFocus = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) 3 else 2
+                    } else if (presetReviewFocus <= 1) {
+                        val next = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) PresetApplyMode.FULL else PresetApplyMode.APPEARANCE_ONLY
+                        if (next != presetMode) presetMode = next
+                    }
+                    else -> if (isOk) when (presetReviewFocus) {
+                        0 -> presetReviewFocus = 2
+                        1 -> if (presetChanges != null) { presetDetailFocus = 0; presetDetails = true }
+                        2 -> if (presetChanges != null) {
+                            val mode = presetMode
+                            presetPrompt = false
+                            persist {
+                                store.applyAppearancePreset(reviewed, mode)
+                                android.widget.Toast.makeText(this, "${reviewed.title} applied · Undo available in presets", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        3 -> presetPrompt = false
+                    }
+                }
+                return true
+            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> presetPrompt = false
                 KeyEvent.KEYCODE_DPAD_LEFT -> confirmPreset = false
@@ -276,7 +338,7 @@ class SettingsActivity : ComponentActivity() {
                     if (presetFocus == AppearancePreset.entries.size + 1) {
                         startActivity(android.content.Intent(this, ProfilesActivity::class.java))
                     } else if (presetFocus < AppearancePreset.entries.size || canRestoreAppearance) {
-                        confirmPreset = false; presetPrompt = true
+                        confirmPreset = false; presetMode = PresetApplyMode.FULL; presetReviewFocus = 0; presetDetails = false; presetPreviews = emptyMap(); presetPreviewError = false; presetPrompt = true
                     }
                 }
             }

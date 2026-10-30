@@ -42,7 +42,7 @@ fun AppearancePresetsScreen(focus: Int, canRestore: Boolean, smoothMotion: Boole
                 .border(1.dp, if (focus == index) LocalAccent.current.base else Color.Transparent, RoundedCornerShape(11.dp))
                 .padding(horizontal = 22.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (personal) "My profiles · Import / Export" else preset?.title ?: "Undo last preset", style = Type.row, color = if (available) Tokens.text else Tokens.textDim)
-                Text(if (personal) "Save your setup, manage profiles or transfer a JSON file" else preset?.description ?: if (canRestore) "Return to the look saved before your most recent preset" else "Available after applying a preset",
+                Text(if (personal) "Save your setup, manage profiles or transfer a JSON file" else preset?.description ?: if (canRestore) "Restore the setup saved before your most recent preset" else "Available after applying a preset",
                     style = Type.small, color = Tokens.textDim)
             }
             }
@@ -62,7 +62,7 @@ fun ApplyPresetDialog(preset: AppearancePreset?, confirmSelected: Boolean) {
             .border(1.dp, Tokens.line, RoundedCornerShape(20.dp)).padding(28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(if (preset == null) "Undo last preset?" else "Apply ${preset.title}?", style = Type.title, color = Tokens.text)
-            Text(preset?.description ?: "Return to the appearance and preset-related choices from immediately before the most recent preset.", style = Type.body, color = Tokens.textDim)
+            Text(preset?.description ?: "Restore the settings saved immediately before the most recent preset. Personal app lists and saved profiles stay unchanged.", style = Type.body, color = Tokens.textDim)
             Text(if (preset == null) "This uses your saved restore point. Applying another preset afterward will save a new one."
                 else if (preset == AppearancePreset.CLASSIC) "Medium rounded cards · Green · 60% Charcoal dim. Your previous appearance stays saved."
                 else "Large circular cards · Green · 80% dim. Your current setup is backed up before applying this preset.",

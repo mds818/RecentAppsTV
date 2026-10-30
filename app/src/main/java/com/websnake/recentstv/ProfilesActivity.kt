@@ -1,5 +1,21 @@
 package com.websnake.recentstv
 
+import androidx.activity.ComponentDialog
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.websnake.recentstv.data.ProfileSettingRow
+import com.websnake.recentstv.data.ProfileSettingsReview
+import com.websnake.recentstv.data.ProfileSettingsFilter
+import com.websnake.recentstv.ui.settings.AllProfileSettings
+import com.websnake.recentstv.ui.settings.ProfileSettingDetails
+import com.websnake.recentstv.data.PresetChange
+import com.websnake.recentstv.ui.settings.ChangeReview
+import com.websnake.recentstv.ui.settings.ProfileManagement
+import com.websnake.recentstv.ui.settings.ProfileApplyReview
+import com.websnake.recentstv.ui.theme.RecentsTheme
 import android.app.Dialog
 import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
@@ -12,6 +28,7 @@ import com.websnake.recentstv.data.ProfileImport
 import android.os.Bundle
 import android.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import android.widget.*
 import androidx.activity.ComponentActivity
@@ -143,48 +160,141 @@ class ProfilesActivity : ComponentActivity() {
         return dialog
     }
     private fun actions(id: String, doc: JSONObject) {
-        modal(doc.optString("name"), choices = listOf(
-            Choice("Back") {},
-            Choice("Apply…") { review(doc.toString(), false) },
-            Choice("View settings…") { details(store.inspectProfile(doc.toString())) },
-            Choice("Export…") { export(doc.toString(2)) },
-            Choice("Rename…") { nameDialog("Rename profile", doc.optString("name")) { name -> work { store.saveProfile(name, doc.toString(), id) } } },
-            Choice("Delete…") { modal("Delete this saved profile?", label("Your current settings will be kept."), listOf(
-                Choice("Cancel") {}, Choice("Delete") { work { store.deleteProfile(id) } })) }
-        ))
+        reviewProfile(doc.toString(), false, id, doc)
     }
-    private fun details(report: ProfileImport) {
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isSoundEffectsEnabled = false }
-        report.entries.forEach { entry ->
-            val title = entry.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
-            content.addView(label(title, 16f).apply { setTextColor(if (entry.status == "Skip" || entry.status == "Partial") Color.rgb(235, 190, 92) else Color.WHITE) })
-            content.addView(label("${entry.status} · ${entry.value}\n${entry.key}" + if (entry.reason.isEmpty()) "" else "\n${entry.reason}").apply { setPadding(dp(8), 0, dp(8), dp(12)) })
-        }
-        val scroll = ScrollView(this).apply {
-            isSoundEffectsEnabled = false; addView(content)
-            layoutParams = LinearLayout.LayoutParams(-1, minOf(dp(270), resources.displayMetrics.heightPixels / 2))
-        }
-        modal("All profile settings · ${report.entries.size}", scroll, listOf(Choice("Close") {}))
-        // Scroll content with the remote; BACK also returns to the review.
-        scroll.isFocusable = true; scroll.requestFocus()
+    private fun review(raw: String, imported: Boolean) = reviewProfile(raw, imported, null, null)
+    private fun reviewProfile(raw: String, imported: Boolean, savedId: String?, document: JSONObject?) = work {
+        val preview = withContext(Dispatchers.Default) { store.reviewProfileSettings(raw) }
+        val smooth = store.settings.first().smoothMotion
+        showProfileReview(preview.report, imported, preview.changes, smooth, savedId, document, preview.rows)
     }
-    private fun review(raw: String, imported: Boolean) {
-        runCatching {
-            val report = store.inspectProfile(raw)
-            val text = "${report.recognized} compatible settings\n${report.missing} missing · kept unchanged\n${report.skipped} unknown or invalid · skipped\n\nReview every option below. Applying creates an undo checkpoint."
-            val actions = mutableListOf(Choice("Cancel") {}, Choice("View all settings…", true) { details(report) })
-            if (report.recognized > 0) {
-                actions += Choice(if (imported) "Save and apply" else "Apply") {
-                    work {
-                        val accepted = ProfileCodec.document(report.name, report.settings).toString()
-                        if (imported) store.saveProfile(report.name, accepted)
-                        store.applyProfile(accepted)
-                        message("Profile applied")
+    private fun showProfileReview(report: ProfileImport, imported: Boolean, changes: List<PresetChange>, smooth: Boolean, savedId: String?, document: JSONObject?, settingRows: List<ProfileSettingRow>) {
+        val canManage = savedId != null && document != null
+        val lastRow = if (canManage) 2 else 1
+        val cancelIndex = lastRow + 1
+        val applyIndex = lastRow + 2
+        var allSettings by mutableStateOf(false)
+        var settingsFilter by mutableStateOf(ProfileSettingsFilter.ALL)
+        var settingsFocus by mutableIntStateOf(-1)
+        var technicalRow by mutableStateOf<ProfileSettingRow?>(null)
+        var technicalFocus by mutableIntStateOf(0)
+        var managing by mutableStateOf(false)
+        var manageFocus by mutableIntStateOf(0)
+        var focus by mutableIntStateOf(0)
+        var detailFocus by mutableIntStateOf(0)
+        var showingChanges by mutableStateOf(false)
+        val dialog = object : ComponentDialog(this) {
+            override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                if (event.action != KeyEvent.ACTION_DOWN) return true
+                val ok = event.keyCode in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A)
+                if (ok && event.repeatCount > 0) return true
+                if (allSettings) {
+                    val technical = technicalRow
+                    if (technical != null) {
+                        when (event.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP -> technicalFocus = (technicalFocus - 1).coerceAtLeast(0)
+                            KeyEvent.KEYCODE_DPAD_DOWN -> technicalFocus = (technicalFocus + 1).coerceAtMost(technical.technicalLines().lastIndex)
+                            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> technicalRow = null
+                            else -> if (ok) technicalRow = null else return super.dispatchKeyEvent(event)
+                        }
+                        return true
                     }
+                    val visible = ProfileSettingsReview.select(settingRows, settingsFilter)
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> allSettings = false
+                        KeyEvent.KEYCODE_DPAD_UP -> settingsFocus = (settingsFocus - 1).coerceAtLeast(-1)
+                        KeyEvent.KEYCODE_DPAD_DOWN -> settingsFocus = (settingsFocus + 1).coerceAtMost(visible.lastIndex.coerceAtLeast(-1))
+                        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            val direction = if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) -1 else 1
+                            val selectedKey = visible.getOrNull(settingsFocus)?.key
+                            settingsFilter = ProfileSettingsFilter.entries[(settingsFilter.ordinal + direction).coerceIn(0, ProfileSettingsFilter.entries.lastIndex)]
+                            val next = ProfileSettingsReview.select(settingRows, settingsFilter)
+                            if (settingsFocus >= 0) settingsFocus = next.indexOfFirst { it.key == selectedKey }.coerceAtLeast(0).coerceAtMost(next.lastIndex.coerceAtLeast(-1))
+                        }
+                        else -> if (ok) {
+                            if (settingsFocus < 0) { if (visible.isNotEmpty()) settingsFocus = 0 }
+                            else visible.getOrNull(settingsFocus)?.let { technicalRow = it; technicalFocus = 0 }
+                        } else return super.dispatchKeyEvent(event)
+                    }
+                    return true
+                }
+                if (managing) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> managing = false
+                        KeyEvent.KEYCODE_DPAD_UP -> manageFocus = (manageFocus - 1).coerceAtLeast(0)
+                        KeyEvent.KEYCODE_DPAD_DOWN -> manageFocus = (manageFocus + 1).coerceAtMost(3)
+                        else -> if (ok) when (manageFocus) {
+                            0 -> { dismiss(); export(document!!.toString(2)) }
+                            1 -> {
+                                dismiss()
+                                nameDialog("Rename profile", report.name) { name -> work { store.saveProfile(name, document!!.toString(), savedId) } }
+                            }
+                            2 -> {
+                                dismiss()
+                                modal("Delete this saved profile?", label("Your current settings will be kept."), listOf(
+                                    Choice("Cancel") {}, Choice("Delete") { work { store.deleteProfile(savedId!!) } }))
+                            }
+                            3 -> managing = false
+                        } else return super.dispatchKeyEvent(event)
+                    }
+                    return true
+                }
+                if (showingChanges) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> detailFocus = (detailFocus - 1).coerceAtLeast(0)
+                        KeyEvent.KEYCODE_DPAD_DOWN -> detailFocus = (detailFocus + 1).coerceAtMost(changes.lastIndex.coerceAtLeast(0))
+                        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> showingChanges = false
+                        else -> if (ok) showingChanges = false else return super.dispatchKeyEvent(event)
+                    }
+                    return true
+                }
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> dismiss()
+                    KeyEvent.KEYCODE_DPAD_UP -> focus = if (focus > lastRow) lastRow else (focus - 1).coerceAtLeast(0)
+                    KeyEvent.KEYCODE_DPAD_DOWN -> focus = if (focus < lastRow) focus + 1 else if (report.recognized > 0) applyIndex else cancelIndex
+                    KeyEvent.KEYCODE_DPAD_LEFT -> if (focus >= cancelIndex) focus = cancelIndex
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> if (focus >= cancelIndex && report.recognized > 0) focus = applyIndex
+                    else -> if (ok) when {
+                        focus == 0 -> { detailFocus = 0; showingChanges = true }
+                        focus == 1 -> { allSettings = true; settingsFilter = ProfileSettingsFilter.ALL; settingsFocus = -1; technicalRow = null }
+                        canManage && focus == 2 -> { manageFocus = 0; managing = true }
+                        focus == cancelIndex -> dismiss()
+                        focus == applyIndex && report.recognized > 0 -> {
+                            dismiss()
+                            work {
+                                val accepted = ProfileCodec.document(report.name, report.settings).toString()
+                                if (imported) store.saveProfile(report.name, accepted)
+                                store.applyProfile(accepted)
+                                message("Profile applied · Undo available in My profiles")
+                            }
+                        }
+                    } else return super.dispatchKeyEvent(event)
+                }
+                return true
+            }
+        }
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val compose = ComposeView(this).apply {
+            isSoundEffectsEnabled = false
+            setContent {
+                RecentsTheme(accent = androidx.compose.ui.graphics.Color(accent)) {
+                    if (allSettings) {
+                        val technical = technicalRow
+                        if (technical != null) ProfileSettingDetails(technical, technicalFocus, smooth)
+                        else AllProfileSettings(report.name, settingRows, settingsFilter, settingsFocus, smooth)
+                    }
+                    else if (managing) ProfileManagement(report.name, manageFocus)
+                    else if (showingChanges) ChangeReview("${report.name} · Changes", "${changes.size} ${if (changes.size == 1) "change" else "changes"}", changes, detailFocus, smooth)
+                    else ProfileApplyReview(report, imported, changes, focus, canManage)
                 }
             }
-            modal(report.name, label(text), actions)
-        }.onFailure { message(it.message ?: "Could not read profile") }
+        }
+        dialog.setContentView(compose)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.setOnDismissListener { compose.disposeComposition() }
+        dialog.show()
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        dialog.window?.setDimAmount(0f) // The shared review frame draws the scrim once.
     }
     private fun export(raw: String) {
         pendingExport = raw

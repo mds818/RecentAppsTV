@@ -16,7 +16,7 @@ Primitive keys register their type when declared in SettingsStore.Keys. Enum cho
 
 ## Detailed review
 
-View all settings in the apply dialog lists every compatible setting, its value, missing settings kept unchanged, and skipped entries with their reasons. Saved profiles also offer View settings without applying. Reports remain local.
+Selecting a saved profile opens its review directly. **View changes** shows effective differences; **All profile settings** opens on All, with Changes and Compatibility filters. Readable names, app sections and current → profile values distinguish changes, unchanged options, missing values kept, and unsupported values skipped. OK on a row opens complete technical Details. The same browser is used for imported files. Reviewing does not apply settings, and reports remain local. Export, Rename and Delete are grouped under Manage profile.
 
 ## Protection feedback
 

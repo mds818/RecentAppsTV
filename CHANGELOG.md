@@ -1,3 +1,13 @@
+# 1.2.0 · Build 58
+
+- Choose Full preset (app defaults plus preset overrides) or Appearance only, with a review before applying and one-step Undo.
+- Keep personal lists, saved profiles, protection, access and update preferences when applying built-in presets.
+- Cache both preset previews to remove loading-text flicker when switching modes. OK on a mode selects Apply; Left/Right also works from View changes and its detail list.
+- Open saved profiles directly in their review; group Export, Rename and Delete in a styled Manage profile view.
+- Review saved and imported profiles in the same All profile settings browser, with readable names, current/effective values and Changes, All and Compatibility filters.
+- Explain missing, unsupported, partly supported and legacy settings. Keep complete keys, values and reasons in scrollable Details.
+- Retain the profile JSON format, existing installation identity and signing key.
+
 # 1.1.2 · Build 53
 
 - Advance the release build number so build 52 installations can update; explain newer releases with non-advancing build numbers instead of reporting current.
